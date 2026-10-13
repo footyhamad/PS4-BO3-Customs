@@ -1,0 +1,54 @@
+name: Build OpenOrbis PRX
+
+on:
+  push:
+    branches:
+      - openorbis-prx-output
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-prx:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld make binutils file
+
+      - name: Download OpenOrbis toolchain
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/openorbis"
+          curl -fL --retry 3 \
+            https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz \
+            -o "$RUNNER_TEMP/openorbis.tar.gz"
+          tar -xzf "$RUNNER_TEMP/openorbis.tar.gz" -C "$RUNNER_TEMP/openorbis" --strip-components=1
+          TOOLCHAIN="$(find "$RUNNER_TEMP/openorbis" -name link.x -printf '%h\n' -quit)"
+          test -n "$TOOLCHAIN"
+          test -x "$TOOLCHAIN/bin/linux/create-lib"
+          echo "OO_PS4_TOOLCHAIN=$TOOLCHAIN" >> "$GITHUB_ENV"
+          echo "OpenOrbis toolchain: $TOOLCHAIN"
+          "$TOOLCHAIN/bin/linux/create-lib" -h || true
+
+      - name: Build PRX
+        working-directory: SPRX
+        run: |
+          set -euxo pipefail
+          make clean
+          make OO_PS4_TOOLCHAIN="$OO_PS4_TOOLCHAIN" CC=clang CXX=clang++ LD=ld.lld
+          test -s build/BO3-Customs.prx
+          sha256sum build/BO3-Customs.prx
+
+      - name: Upload PRX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BO3-Customs-OpenOrbis-PRX
+          path: SPRX/build/BO3-Customs.prx
+          if-no-files-found: error
+          retention-days: 14
