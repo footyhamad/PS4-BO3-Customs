@@ -8,7 +8,7 @@
 #include <stdarg.h>
 #include <string>
 
-#include <kernel.h>
+#include <orbis/libkernel.h>
 #include <sys/mman.h>
 
 #include "HDE64.h"
