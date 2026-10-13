@@ -34,7 +34,7 @@ $(ELF): $(OBJECTS)
 	$(LD) $(OBJECTS) -o "$@" $(LDFLAGS)
 
 $(TARGET): $(ELF)
-	"$(OO_PS4_TOOLCHAIN)/bin/linux/create-lib" -in="$<" -out="$@"
+	"$(OO_PS4_TOOLCHAIN)/bin/linux/create-fself" -in="$<" --out="$(OUT)/BO3-Customs.oelf" --lib="$@" --paid 0x3800000000000011
 	test -s "$@"
 	file "$@"
 
