@@ -24,6 +24,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang lld make binutils file
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+
       - name: Download OpenOrbis toolchain
         run: |
           set -euxo pipefail
@@ -34,10 +39,12 @@ jobs:
           tar -xzf "$RUNNER_TEMP/openorbis.tar.gz" -C "$RUNNER_TEMP/openorbis" --strip-components=1
           TOOLCHAIN="$(find "$RUNNER_TEMP/openorbis" -name link.x -printf '%h\n' -quit)"
           test -n "$TOOLCHAIN"
-          test -x "$TOOLCHAIN/bin/linux/create-lib"
+          git clone --depth=1 https://github.com/OpenOrbis/create-fself.git "$RUNNER_TEMP/create-fself"
+          (cd "$RUNNER_TEMP/create-fself/cmd/create-fself" && go build -o "$TOOLCHAIN/bin/linux/create-fself")
+          test -x "$TOOLCHAIN/bin/linux/create-fself"
           echo "OO_PS4_TOOLCHAIN=$TOOLCHAIN" >> "$GITHUB_ENV"
           echo "OpenOrbis toolchain: $TOOLCHAIN"
-          "$TOOLCHAIN/bin/linux/create-lib" -h || true
+          "$TOOLCHAIN/bin/linux/create-fself" -h || true
 
       - name: Build PRX
         working-directory: SPRX
