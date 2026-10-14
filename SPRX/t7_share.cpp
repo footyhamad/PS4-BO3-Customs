@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include <dirent.h>
 #include "t7_share.hpp"
 
 #include <net.h>
@@ -542,7 +543,7 @@ static void Walk(const char* root, const char* rel, int depth, int kind, Served*
     else
         snprintf(folder, sizeof(folder), "%s", root);
 
-    const int fd = sceKernelOpen(folder, SCE_KERNEL_O_RDONLY | SCE_KERNEL_O_DIRECTORY, 0);
+    const int fd = sceKernelOpen(folder, O_RDONLY | O_DIRECTORY, 0);
 
     if (fd < 0)
         return;
@@ -559,7 +560,7 @@ static void Walk(const char* root, const char* rel, int depth, int kind, Served*
 
         for (int at = 0; at + 8 <= n;)
         {
-            const SceKernelDirent* const entry = (const SceKernelDirent*)(listing + at);
+            const struct dirent* const entry = (const struct dirent*)(listing + at);
 
             if (entry->d_reclen == 0)
                 break;
@@ -576,7 +577,7 @@ static void Walk(const char* root, const char* rel, int depth, int kind, Served*
             if (length <= 0 || (size_t)length >= sizeof(child))
                 continue;
 
-            if (entry->d_type == SCE_KERNEL_DT_DIR)
+            if (entry->d_type == DT_DIR)
             {
                 if (depth < kWalkDepth)
                     Walk(root, child, depth + 1, kind, out, count);
@@ -588,7 +589,7 @@ static void Walk(const char* root, const char* rel, int depth, int kind, Served*
                 continue;
 
             Served& file = out[*count];
-            SceKernelStat st;
+            OrbisKernelStat st;
             snprintf(file.path, sizeof(file.path), "%s/%s", root, child);
 
             if (sceKernelStat(file.path, &st) != 0 || SCE_KERNEL_S_ISDIR(st.st_mode) || st.st_size < 0)
@@ -632,8 +633,8 @@ static void Throttle(Pace& pace, size_t sent)
 
 static bool SendFile(Stream& stream, const Served& file, uint64_t offset, char* buffer, Pace& pace, uint64_t* total)
 {
-    const int fd = sceKernelOpen(file.path, SCE_KERNEL_O_RDONLY, 0);
-    SceKernelStat st;
+    const int fd = sceKernelOpen(file.path, O_RDONLY, 0);
+    OrbisKernelStat st;
 
     if (fd < 0 || sceKernelFstat(fd, &st) != 0 || (uint64_t)st.st_size != file.size || offset > file.size)
     {
@@ -855,7 +856,7 @@ static void* Server(void*)
         SetWait(peer, kSocketWaitUs);
         g_connections.fetch_add(1);
 
-        ScePthread thread;
+        OrbisPthread thread;
 
         if (scePthreadCreate(&thread, nullptr, Serve, (void*)(intptr_t)peer, "BO3-Customs Share Send") != 0)
         {
@@ -996,7 +997,7 @@ static bool Writable(const char* root, const char* kind)
     snprintf(path, sizeof(path), "%s/%s/bo3customs-write-test.part", root, kind);
     MakeParents(path);
 
-    const int fd = sceKernelOpen(path, SCE_KERNEL_O_WRONLY | SCE_KERNEL_O_CREAT | SCE_KERNEL_O_TRUNC, 0777);
+    const int fd = sceKernelOpen(path, O_WRONLY | O_CREAT | O_TRUNC, 0777);
 
     if (fd < 0)
         return false;
@@ -1029,7 +1030,7 @@ static bool Marker(const Entry& entry)
 
 static bool Fetch(Stream& stream, int id, const Entry& entry, const char* target, char* buffer)
 {
-    SceKernelStat st;
+    OrbisKernelStat st;
 
     if (sceKernelStat(target, &st) == 0 && (uint64_t)st.st_size == entry.size)
     {
@@ -1054,8 +1055,8 @@ static bool Fetch(Stream& stream, int id, const Entry& entry, const char* target
 
     MakeParents(target);
 
-    const int fd = sceKernelOpen(part, SCE_KERNEL_O_WRONLY | SCE_KERNEL_O_CREAT |
-                                           (offset ? SCE_KERNEL_O_APPEND : SCE_KERNEL_O_TRUNC), 0777);
+    const int fd = sceKernelOpen(part, O_WRONLY | O_CREAT |
+                                           (offset ? O_APPEND : O_TRUNC), 0777);
 
     if (fd < 0)
         return Fail("this console could not write %s", entry.rel);
@@ -1437,7 +1438,7 @@ static void Start(const Role& role, const char* map)
     T7Log_Write("[Share] joined %u.%u.%u.%u on %s (%s)", b[0], b[1], b[2], b[3], map,
                 session.needMap ? "this console does not have that map" : "the map is here");
 
-    ScePthread thread;
+    OrbisPthread thread;
 
     if (scePthreadCreate(&thread, nullptr, Fetcher, nullptr, "BO3-Customs Share Fetch") != 0)
     {
@@ -1632,13 +1633,13 @@ static void Size(char* out, size_t size, uint64_t bytes)
 
 static bool ImportBound(const void* function)
 {
-    SceKernelVirtualQueryInfo info;
+    OrbisKernelVirtualQueryInfo info;
 
     if (sceKernelVirtualQuery((void*)&ImportBound, 0, &info, sizeof(info)) < 0)
         return true;
 
-    const uintptr_t start = (uintptr_t)info.start;
-    const uintptr_t end = (uintptr_t)info.end;
+    const uintptr_t start = (uintptr_t)info.unk01;
+    const uintptr_t end = (uintptr_t)info.unk02;
     const uintptr_t stub = (uintptr_t)function;
 
     if (stub < 0x10000)
@@ -1684,7 +1685,7 @@ void T7Share_Install(uintptr_t base)
         return;
     }
 
-    ScePthread thread;
+    OrbisPthread thread;
 
     if (scePthreadCreate(&thread, nullptr, Server, nullptr, "BO3-Customs Share") != 0)
     {
