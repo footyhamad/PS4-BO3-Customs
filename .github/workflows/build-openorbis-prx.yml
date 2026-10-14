@@ -15,14 +15,23 @@ permissions:
 jobs:
   build-prx:
     runs-on: ubuntu-22.04
+    timeout-minutes: 20
     steps:
       - name: Checkout fork
         uses: actions/checkout@v4
 
-      - name: Install build dependencies
+      - name: Verify build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang lld make binutils file
+          set -euxo pipefail
+          missing=0
+          for tool in clang clang++ ld.lld make objcopy file curl git go; do
+            command -v "$tool" >/dev/null 2>&1 || missing=1
+          done
+          if [ "$missing" -ne 0 ]; then
+            sudo apt-get update
+            sudo apt-get install -y clang lld make binutils file curl git golang-go
+          fi
+          for tool in clang clang++ ld.lld make objcopy file curl git go; do command -v "$tool"; done
 
       - name: Set up Go
         uses: actions/setup-go@v5
