@@ -3,10 +3,56 @@
 #include "t7_kbm_strings.hpp"
 #include "t7_config.hpp"
 
-#include <orbis/Mouse.h>
-#include <orbis/Ime.h>
 #include <orbis/Sysmodule.h>
 #include <orbis/UserService.h>
+
+#ifndef SCE_IME_KEYBOARD_EVENT_OPEN
+#define SCE_IME_KEYBOARD_EVENT_OPEN 256
+#define SCE_IME_KEYBOARD_EVENT_KEYCODE_DOWN 257
+#define SCE_IME_KEYBOARD_EVENT_KEYCODE_UP 258
+#define SCE_IME_KEYBOARD_EVENT_KEYCODE_REPEAT 259
+#define SCE_IME_KEYBOARD_EVENT_CONNECTION 260
+#define SCE_IME_KEYBOARD_EVENT_DISCONNECTION 261
+#define SCE_IME_KEYBOARD_EVENT_ABORT 262
+#define SCE_IME_KEYCODE_STATE_KEYCODE_VALID 0x00000001
+#define SCE_MOUSE_OPEN_PARAM_MERGED 0x01
+#define SCE_MOUSE_PORT_TYPE_STANDARD 0
+#define SCE_MOUSE_BUTTON_INTERCEPTED 0x80000000u
+#endif
+
+struct SceImeEventParam
+{
+    OrbisImeKeycode keycode;
+    uint8_t reserved[64 - sizeof(OrbisImeKeycode)];
+};
+struct SceImeEvent
+{
+    int32_t id;
+    SceImeEventParam param;
+};
+struct SceMouseOpenParam
+{
+    uint8_t behaviorFlag;
+    uint8_t reserve[7];
+};
+struct SceMouseData
+{
+    uint64_t timestamp;
+    bool connected;
+    uint32_t buttons;
+    int32_t xAxis;
+    int32_t yAxis;
+    int32_t wheel;
+    int32_t tilt;
+    uint8_t reserve[8];
+};
+extern "C" {
+int32_t sceMouseInit(void);
+int32_t sceMouseOpen(OrbisUserServiceUserId userId, int32_t type, int32_t index, SceMouseOpenParam* param);
+int32_t sceMouseRead(int32_t handle, SceMouseData* data, int32_t count);
+int32_t sceMouseClose(int32_t handle);
+}
+
 
 namespace T7Kbm
 {
@@ -1750,7 +1796,7 @@ static void ImeHandler(void* arg, const SceImeEvent* event)
                              event->id == SCE_IME_KEYBOARD_EVENT_KEYCODE_UP ||
                              event->id == SCE_IME_KEYBOARD_EVENT_KEYCODE_REPEAT))
     {
-        const SceImeKeycode& code = event->param.keycode;
+        const OrbisImeKeycode& code = event->param.keycode;
 
         if ((code.status & SCE_IME_KEYCODE_STATE_KEYCODE_VALID) != 0 && code.keycode < sizeof(g_hidToKey))
         {
@@ -1767,32 +1813,32 @@ static void ImeHandler(void* arg, const SceImeEvent* event)
     ((ImeHandler_t)g_imeOriginal)(arg, event);
 }
 
-static SceUserServiceUserId MouseUser()
+static OrbisUserServiceUserId MouseUser()
 {
-    const SceUserServiceUserId padUser =
+    const OrbisUserServiceUserId padUser =
         *(const int32_t*)(g_base + kGamepads + kController * kGamepadSize + kPadUser);
 
-    if (padUser != SCE_USER_SERVICE_USER_ID_INVALID && padUser != 0)
+    if (padUser != ORBIS_USER_SERVICE_USER_ID_INVALID && padUser != 0)
         return padUser;
 
-    SceUserServiceUserId user = SCE_USER_SERVICE_USER_ID_INVALID;
+    OrbisUserServiceUserId user = ORBIS_USER_SERVICE_USER_ID_INVALID;
 
-    if (sceUserServiceGetInitialUser(&user) == 0 && user != SCE_USER_SERVICE_USER_ID_INVALID)
+    if (sceUserServiceGetInitialUser(&user) == 0 && user != ORBIS_USER_SERVICE_USER_ID_INVALID)
         return user;
 
-    SceUserServiceLoginUserIdList list;
+    OrbisUserServiceLoginUserIdList list;
     memset(&list, 0, sizeof(list));
 
     if (sceUserServiceGetLoginUserIdList(&list) == 0)
     {
-        for (int i = 0; i < SCE_USER_SERVICE_MAX_LOGIN_USERS; ++i)
+        for (int i = 0; i < ORBIS_USER_SERVICE_MAX_LOGIN_USERS; ++i)
         {
-            if (list.userId[i] != SCE_USER_SERVICE_USER_ID_INVALID)
+            if (list.userId[i] != ORBIS_USER_SERVICE_USER_ID_INVALID)
                 return list.userId[i];
         }
     }
 
-    return SCE_USER_SERVICE_USER_ID_INVALID;
+    return ORBIS_USER_SERVICE_USER_ID_INVALID;
 }
 
 static void SetMouseButtons(uint32_t buttons)
@@ -1859,9 +1905,9 @@ static void PollMouse(int32_t lc)
 
         g_mouseRetryAt = g_frames + kRetryFrames;
 
-        const SceUserServiceUserId user = MouseUser();
+        const OrbisUserServiceUserId user = MouseUser();
 
-        if (user == SCE_USER_SERVICE_USER_ID_INVALID)
+        if (user == ORBIS_USER_SERVICE_USER_ID_INVALID)
             return;
 
         SceMouseOpenParam param;
