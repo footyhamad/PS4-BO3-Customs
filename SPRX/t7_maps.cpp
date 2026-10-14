@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include <dirent.h>
 #include "t7_maps.hpp"
 #include "t7_mapimages.hpp"
 #include "t7_lua.hpp"
@@ -8,9 +9,9 @@
 #ifdef _DEBUG
 extern "C" {
     int sceKernelInstallExceptionHandler(int signum, void (*handler)(int, void*));
-    int sceKernelRaiseException(ScePthread thread, int signum);
+    int sceKernelRaiseException(OrbisPthread thread, int signum);
     int T7Unity_InstallExceptionHandler(int signum, void (*handler)(int, void*));
-    int T7Unity_RaiseException(ScePthread thread, int signum);
+    int T7Unity_RaiseException(OrbisPthread thread, int signum);
 }
 #endif
 
@@ -438,7 +439,7 @@ struct StallSample
 };
 
 using InstallHandler_t = int (*)(int, void (*)(int, void*));
-using RaiseException_t = int (*)(ScePthread, int);
+using RaiseException_t = int (*)(OrbisPthread, int);
 
 static const char* const k_stallThreads[kStallThreads] = {
     "0_Main", "2_Backend", "1_Worker0", "1_Worker1", "1_Worker2", "3_Server", "Database",
@@ -621,7 +622,7 @@ static bool IsZoneFile(const char* name)
 
 static int ListFolder(const char* folder, bool folders, char names[][kListedNameMax], int capacity)
 {
-    const int fd = sceKernelOpen(folder, SCE_KERNEL_O_RDONLY | SCE_KERNEL_O_DIRECTORY, 0);
+    const int fd = sceKernelOpen(folder, O_RDONLY | O_DIRECTORY, 0);
 
     if (fd < 0)
         return 0;
@@ -638,7 +639,7 @@ static int ListFolder(const char* folder, bool folders, char names[][kListedName
 
         for (int at = 0; at + 8 <= n;)
         {
-            const SceKernelDirent* const entry = (const SceKernelDirent*)(buffer + at);
+            const struct dirent* const entry = (const struct dirent*)(buffer + at);
 
             if (entry->d_reclen == 0)
                 break;
@@ -648,7 +649,7 @@ static int ListFolder(const char* folder, bool folders, char names[][kListedName
             if (entry->d_fileno == 0 || entry->d_name[0] == '.')
                 continue;
 
-            if ((entry->d_type == SCE_KERNEL_DT_DIR) != folders || strlen(entry->d_name) >= kListedNameMax)
+            if ((entry->d_type == DT_DIR) != folders || strlen(entry->d_name) >= kListedNameMax)
                 continue;
 
             if (count < capacity)
@@ -739,7 +740,7 @@ static int AddPackage(const char* name, bool map, const char* folder, const char
 
 static bool FindPackageFile(const Package& package, const char* rel, char* out, size_t size)
 {
-    SceKernelStat st;
+    OrbisKernelStat st;
     snprintf(out, size, "%s/%s", package.folder, rel);
 
     if (sceKernelStat(out, &st) == 0)
@@ -765,7 +766,7 @@ static void ScanUsermaps(const char* data)
         char folder[224];
         char zoneFolder[224];
         char zone[256];
-        SceKernelStat st;
+        OrbisKernelStat st;
 
         snprintf(folder, sizeof(folder), "%s/%s", root, folders[i]);
         snprintf(zoneFolder, sizeof(zoneFolder), "%s/zone", folder);
@@ -2236,12 +2237,12 @@ static void StallSignal(int, void* context)
         sample.rsp = words[sample.mcontext + 23];
 
         const uintptr_t rsp = sample.rsp & ~(uintptr_t)7;
-        SceKernelVirtualQueryInfo info;
+        OrbisKernelVirtualQueryInfo info;
 
         if (rsp >= 0x10000 && rsp < 0x800000000000ull && sceKernelVirtualQuery((void*)rsp, 0, &info, sizeof(info)) >= 0 &&
-            (info.protection & 1) && (uintptr_t)info.start <= rsp && rsp < (uintptr_t)info.end)
+            (info.unk04 & 1) && (uintptr_t)info.unk01 <= rsp && rsp < (uintptr_t)info.unk02)
         {
-            size_t bytes = (uintptr_t)info.end - rsp;
+            size_t bytes = (uintptr_t)info.unk02 - rsp;
 
             if (bytes > sizeof(sample.stack))
                 bytes = sizeof(sample.stack);
@@ -2267,15 +2268,15 @@ static bool CallPrecedes(uint64_t value)
 
 static void AppendAddress(char* out, size_t size, size_t* used, uint64_t value)
 {
-    SceKernelVirtualQueryInfo info;
+    OrbisKernelVirtualQueryInfo info;
 
     if (value >= g_base && value < g_base + kCodeEnd)
         Appendf(out, size, used, " %llX", (unsigned long long)(value - g_base));
     else if (value >= g_sprxStart && value < g_sprxEnd)
         Appendf(out, size, used, " sprx+%llX", (unsigned long long)(value - g_sprxStart));
     else if (value >= 0x10000 && value < 0x800000000000ull && sceKernelVirtualQuery((void*)value, 0, &info, sizeof(info)) >= 0 &&
-             (uintptr_t)info.start <= value && value < (uintptr_t)info.end)
-        Appendf(out, size, used, " %.32s+%llX", info.name, (unsigned long long)(value - (uintptr_t)info.start));
+             (uintptr_t)info.unk01 <= value && value < (uintptr_t)info.unk02)
+        Appendf(out, size, used, " %.32s+%llX", info.name, (unsigned long long)(value - (uintptr_t)info.unk01));
     else
         Appendf(out, size, used, " ?%llX", (unsigned long long)value);
 }
@@ -2313,7 +2314,7 @@ static void ReportLine(const char* format, ...)
 
 static void RaiseThread()
 {
-    const ScePthread self = scePthreadSelf();
+    const OrbisPthread self = scePthreadSelf();
     scePthreadSetprio(self, SCE_KERNEL_PRIO_FIFO_HIGHEST);
 
     if (scePthreadSetaffinity(self, 0x7F) != 0)
@@ -2379,13 +2380,13 @@ static void LogStallSample(const char* name)
 
 static bool ThreadStack(int index, uintptr_t thread, uintptr_t* low, uintptr_t* high)
 {
-    ScePthreadAttr attr;
+    OrbisPthreadAttr attr;
     void* address = nullptr;
     size_t size = 0;
 
     if (scePthreadAttrInit(&attr) == 0)
     {
-        if (scePthreadAttrGet((ScePthread)thread, &attr) != 0 || scePthreadAttrGetstack(&attr, &address, &size) != 0)
+        if (scePthreadAttrGet((OrbisPthread)thread, &attr) != 0 || scePthreadAttrGetstack(&attr, &address, &size) != 0)
         {
             address = nullptr;
             size = 0;
@@ -2401,13 +2402,13 @@ static bool ThreadStack(int index, uintptr_t thread, uintptr_t* low, uintptr_t* 
     if (mainProbe && (!probe || mainProbe < start || mainProbe >= start + size))
         probe = mainProbe;
 
-    SceKernelVirtualQueryInfo info;
+    OrbisKernelVirtualQueryInfo info;
 
-    if (!probe || sceKernelVirtualQuery((void*)probe, 0, &info, sizeof(info)) < 0 || !(info.protection & 1))
+    if (!probe || sceKernelVirtualQuery((void*)probe, 0, &info, sizeof(info)) < 0 || !(info.unk04 & 1))
         return false;
 
-    *low = (uintptr_t)info.start;
-    *high = (uintptr_t)info.end;
+    *low = (uintptr_t)info.unk01;
+    *high = (uintptr_t)info.unk02;
 
     if (probe != mainProbe)
     {
@@ -2563,7 +2564,7 @@ static void SampleStalledThreads(uint32_t round, uint64_t stalledMs)
         g_stallTarget.store(thread, std::memory_order_release);
         g_stallState.store(1, std::memory_order_release);
 
-        const int raised = g_raiseException((ScePthread)thread, kStallSignal);
+        const int raised = g_raiseException((OrbisPthread)thread, kStallSignal);
         uint64_t waited = 0;
 
         while (raised == 0 && g_stallState.load(std::memory_order_acquire) != 2 && waited < kStallAnswerUs)
@@ -2698,12 +2699,12 @@ static void StartStallWatch()
 
     started = true;
 
-    SceKernelVirtualQueryInfo info;
+    OrbisKernelVirtualQueryInfo info;
 
-    if (sceKernelVirtualQuery((void*)&StallSignal, 0, &info, sizeof(info)) >= 0 && (info.protection & 4))
+    if (sceKernelVirtualQuery((void*)&StallSignal, 0, &info, sizeof(info)) >= 0 && (info.unk04 & 4))
     {
-        g_sprxStart = (uintptr_t)info.start;
-        g_sprxEnd = (uintptr_t)info.end;
+        g_sprxStart = (uintptr_t)info.unk01;
+        g_sprxEnd = (uintptr_t)info.unk02;
     }
 
     const uintptr_t self = g_sprxStart ? ImportTarget((uintptr_t)&scePthreadSelf) : 0;
@@ -2744,7 +2745,7 @@ static void StartStallWatch()
             T7Log_Write("[Stall] installing the exception handler through %s failed (0x%08X)", from, (uint32_t)installed);
     }
 
-    ScePthread thread;
+    OrbisPthread thread;
     const int created = scePthreadCreate(&thread, nullptr, StallWatch, nullptr, "BO3-Customs Stall");
     const int mirrored = scePthreadCreate(&thread, nullptr, StallMirror, nullptr, "BO3-Customs Stall Log");
     const char* const state = created == 0 && mirrored == 0 ? "running" : "NOT started";
@@ -3910,7 +3911,7 @@ constexpr size_t kRawDescriptionMax = 32768;
 
 static char* ReadSmallFile(const char* path, size_t max)
 {
-    const int fd = sceKernelOpen(path, SCE_KERNEL_O_RDONLY, 0);
+    const int fd = sceKernelOpen(path, O_RDONLY, 0);
 
     if (fd < 0)
         return nullptr;
@@ -4440,7 +4441,7 @@ static void FormatDescription(const char* raw, char* out, size_t size)
 
 static bool MoviePlayable(const char* path, char* why, size_t whySize)
 {
-    const int fd = sceKernelOpen(path, SCE_KERNEL_O_RDONLY, 0);
+    const int fd = sceKernelOpen(path, O_RDONLY, 0);
 
     if (fd < 0)
     {
@@ -4888,7 +4889,7 @@ static void ScanMods(const char* data)
         for (int k = 0; k < kModZoneKinds; ++k)
         {
             char file[288];
-            SceKernelStat st;
+            OrbisKernelStat st;
             snprintf(file, sizeof(file), "%s/%s.ff", base, k_modZones[k]);
             const bool here = sceKernelStat(file, &st) == 0;
             snprintf(file, sizeof(file), "%s/%s.ff", zone, k_modZones[k]);
@@ -4957,7 +4958,7 @@ static void ReadChosenMods()
 
 static bool WriteChosenMods(const char (*names)[kNameMax], int count)
 {
-    const int fd = sceKernelOpen(k_chosenModFile, SCE_KERNEL_O_WRONLY | SCE_KERNEL_O_CREAT | SCE_KERNEL_O_TRUNC, 0777);
+    const int fd = sceKernelOpen(k_chosenModFile, O_WRONLY | O_CREAT | O_TRUNC, 0777);
 
     if (fd < 0)
         return false;
@@ -5291,7 +5292,7 @@ static int RemoveTree(const char* path, int depth)
     if (depth > 8)
         return 1;
 
-    const int fd = sceKernelOpen(path, SCE_KERNEL_O_RDONLY | SCE_KERNEL_O_DIRECTORY, 0);
+    const int fd = sceKernelOpen(path, O_RDONLY | O_DIRECTORY, 0);
 
     if (fd < 0)
         return 1;
@@ -5330,7 +5331,7 @@ static int RemoveTree(const char* path, int depth)
 
     for (size_t at = 0; at + 8 <= length;)
     {
-        const SceKernelDirent* const entry = (const SceKernelDirent*)(listing + at);
+        const struct dirent* const entry = (const struct dirent*)(listing + at);
 
         if (entry->d_reclen == 0)
             break;
@@ -5348,7 +5349,7 @@ static int RemoveTree(const char* path, int depth)
             continue;
         }
 
-        if (entry->d_type == SCE_KERNEL_DT_DIR)
+        if (entry->d_type == DT_DIR)
             failures += RemoveTree(child, depth + 1);
         else if (sceKernelUnlink(child) < 0)
             failures += RemoveTree(child, depth + 1);
@@ -5365,7 +5366,7 @@ static int RemoveTree(const char* path, int depth)
 static void* UninstallThread(void*)
 {
     const int failures = RemoveTree(g_uninstallRoot, 0);
-    SceKernelStat st;
+    OrbisKernelStat st;
     const bool removed = sceKernelStat(g_uninstallRoot, &st) != 0;
 
     if (removed)
@@ -5657,7 +5658,7 @@ bool T7Maps_Uninstall(const char* map, char* message, size_t size)
     g_uninstallMessage[0] = 0;
     g_uninstallRemoved = false;
 
-    ScePthread thread;
+    OrbisPthread thread;
 
     if (scePthreadCreate(&thread, nullptr, UninstallThread, nullptr, "BO3-Customs Uninstall") != 0)
     {
