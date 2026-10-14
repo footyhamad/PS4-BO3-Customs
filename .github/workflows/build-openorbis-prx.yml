@@ -24,7 +24,7 @@ jobs:
         run: |
           set -euxo pipefail
           sudo apt-get install -y clang lld make binutils file
-          for tool in clang clang++ ld.lld make objcopy file curl git; do command -v "$tool"; done
+          for tool in clang clang++ ld.lld make objcopy file curl git readelf; do command -v "$tool"; done
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -39,10 +39,9 @@ jobs:
             https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz \
             -o "$RUNNER_TEMP/openorbis.tar.gz"
           tar -xzf "$RUNNER_TEMP/openorbis.tar.gz" -C "$RUNNER_TEMP/openorbis" --strip-components=1
-          TOOLCHAIN="$(find "$RUNNER_TEMP/openorbis" -name link.x -printf '%h\n' -quit)"
+          TOOLCHAIN="$(find "$RUNNER_TEMP/openorbis" -name link.x -printf '%h\\n' -quit)"
           test -n "$TOOLCHAIN"
           git clone --depth=1 https://github.com/OpenOrbis/create-fself.git "$RUNNER_TEMP/create-fself"
-          # Upstream go.mod uses Windows-style local replacement paths; normalize them for Linux CI.
           cat > "$RUNNER_TEMP/create-fself/cmd/create-fself/go.mod" <<'EOF'
           module create-fself
 
@@ -76,7 +75,7 @@ jobs:
           test -s "$RUNNER_TEMP/GoldHEN_Plugins_SDK/build/crtprx.o"
           echo "GOLDHEN_SDK=$RUNNER_TEMP/GoldHEN_Plugins_SDK" >> "$GITHUB_ENV"
 
-      - name: Build PRX
+      - name: Build and verify PRX
         working-directory: SPRX
         run: |
           set -euxo pipefail
@@ -85,37 +84,11 @@ jobs:
           test -s build/BO3-Customs.elf
           test -s build/BO3-Customs.prx
           readelf -Ws build/BO3-Customs.elf | tee build/symbols.txt
-          grep -Eq '[[:space:]]plugin_load
-
-      - name: Upload PRX artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: BO3-Customs-OpenOrbis-PRX
-          path: SPRX/build/BO3-Customs.prx
-          if-no-files-found: error
-          retention-days: 14
- build/symbols.txt
-          grep -Eq '[[:space:]]plugin_unload
-
-      - name: Upload PRX artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: BO3-Customs-OpenOrbis-PRX
-          path: SPRX/build/BO3-Customs.prx
-          if-no-files-found: error
-          retention-days: 14
- build/symbols.txt
-          grep -Eq '[[:space:]]module_start
-
-      - name: Upload PRX artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: BO3-Customs-OpenOrbis-PRX
-          path: SPRX/build/BO3-Customs.prx
-          if-no-files-found: error
-          retention-days: 14
- build/symbols.txt
+          grep -Fq 'plugin_load' build/symbols.txt
+          grep -Fq 'plugin_unload' build/symbols.txt
+          grep -Fq 'module_start' build/symbols.txt
           sha256sum build/BO3-Customs.prx
+          file build/BO3-Customs.prx
 
       - name: Upload PRX artifact
         uses: actions/upload-artifact@v4
