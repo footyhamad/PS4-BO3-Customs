@@ -14,8 +14,9 @@ ELF      := $(OUT)/BO3-Customs.elf
 COMMON_FLAGS := --target=x86_64-pc-freebsd12-elf -DPS4 -D_POSIX_C_SOURCE=200809L -include time.h -fPIC -funwind-tables -isysroot $(OO_PS4_TOOLCHAIN) -isystem $(OO_PS4_TOOLCHAIN)/include -I.
 CFLAGS   := $(COMMON_FLAGS) -c
 CXXFLAGS := $(COMMON_FLAGS) -std=c++20 -isystem $(OO_PS4_TOOLCHAIN)/include/c++/v1
-LIBS     := -lc -lc++ -lkernel -lSceSysmodule_stub_weak -lSceMouse_stub_weak -lSceUserService_stub_weak -lSceNet_stub_weak
-LDFLAGS  := -m elf_x86_64 -pie --script $(OO_PS4_TOOLCHAIN)/link.x --eh-frame-hdr -L$(OO_PS4_TOOLCHAIN)/lib -L./lib $(LIBS) $(OO_PS4_TOOLCHAIN)/lib/crtlib.o ./lib/libkernel_gen_stub_weak.a ./lib/libkernel_unity_stub_weak.a
+LIBS     := -lc -lc++ -lkernel -lSceSysmodule -lSceMouse -lSceUserService -lSceNet
+GOLDHEN_SDK ?= $(HOME)/GoldHEN_Plugins_SDK
+LDFLAGS  := -m elf_x86_64 -pie --script $(OO_PS4_TOOLCHAIN)/link.x -e _init --eh-frame-hdr -L$(OO_PS4_TOOLCHAIN)/lib $(LIBS) $(GOLDHEN_SDK)/build/crtprx.o
 
 CPP_SOURCES := $(wildcard *.cpp)
 C_SOURCES   := $(wildcard *.c)
