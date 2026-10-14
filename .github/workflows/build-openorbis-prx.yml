@@ -39,7 +39,7 @@ jobs:
             https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz \
             -o "$RUNNER_TEMP/openorbis.tar.gz"
           tar -xzf "$RUNNER_TEMP/openorbis.tar.gz" -C "$RUNNER_TEMP/openorbis" --strip-components=1
-          TOOLCHAIN="$(find "$RUNNER_TEMP/openorbis" -name link.x -printf '%h\\n' -quit)"
+          TOOLCHAIN="$(find "$RUNNER_TEMP/openorbis" -name link.x -printf '%h\n' -quit)"
           test -n "$TOOLCHAIN"
           git clone --depth=1 https://github.com/OpenOrbis/create-fself.git "$RUNNER_TEMP/create-fself"
           cat > "$RUNNER_TEMP/create-fself/cmd/create-fself/go.mod" <<'EOF'
