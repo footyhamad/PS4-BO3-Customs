@@ -1,5 +1,6 @@
 #include "headers.hpp"
 #include <fcntl.h>
+#include <atomic>
 
 namespace
 {
@@ -124,20 +125,57 @@ static void* start_thread(void*)
     return nullptr;
 }
 
+namespace
+{
+std::atomic<bool> g_pluginStarted{false};
+
+int StartPlugin()
+{
+    bool expected = false;
+    if (!g_pluginStarted.compare_exchange_strong(expected, true))
+        return 0;
+
+    OrbisPthread thread{};
+    const int createResult = scePthreadCreate(&thread, nullptr, start_thread, nullptr, "BO3-Customs Init");
+    if (createResult != 0)
+    {
+        g_pluginStarted.store(false);
+        return createResult;
+    }
+
+    return scePthreadJoin(thread, nullptr);
+}
+}
+
 extern "C"
 {
+__attribute__((visibility("default")))
+int32_t plugin_load(int32_t argc, const char* argv[])
+{
+    (void)argc;
+    (void)argv;
+    return StartPlugin();
+}
+
+__attribute__((visibility("default")))
+int32_t plugin_unload(int32_t argc, const char* argv[])
+{
+    (void)argc;
+    (void)argv;
+    return 0;
+}
+
 int module_start(size_t argc, const void* args)
 {
-    OrbisPthread thread;
-
-    scePthreadCreate(&thread, nullptr, start_thread, nullptr, "BO3-Customs Init");
-    scePthreadJoin(thread, nullptr);
-
-    return 0;
+    (void)argc;
+    (void)args;
+    return StartPlugin();
 }
 
 int module_stop(size_t argc, const void* args)
 {
+    (void)argc;
+    (void)args;
     return 0;
 }
 }
