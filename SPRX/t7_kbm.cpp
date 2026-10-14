@@ -3,10 +3,10 @@
 #include "t7_kbm_strings.hpp"
 #include "t7_config.hpp"
 
-#include <mouse.h>
-#include <libime.h>
-#include <libsysmodule.h>
-#include <user_service.h>
+#include <orbis/Mouse.h>
+#include <orbis/Ime.h>
+#include <orbis/Sysmodule.h>
+#include <orbis/UserService.h>
 
 namespace T7Kbm
 {
