@@ -43,8 +43,8 @@ uint64_t GetBaseAddress() {
     void* address = nullptr;
 
     while (sceKernelVirtualQuery(address, 0, &info, sizeof(info)) >= 0) {
-        const uintptr_t start = (uintptr_t)info.start_addr;
-        const uintptr_t end = (uintptr_t)info.end_addr;
+        const uintptr_t start = (uintptr_t)info.start_addr_addr;
+        const uintptr_t end = (uintptr_t)info.end_addr_addr;
 
         if (end <= start)
             break;
@@ -59,15 +59,15 @@ uint64_t GetBaseAddress() {
         g_execEnd = end;
         g_moduleEnd = end;
 
-        SceKernelVirtualQueryInfo next;
+        OrbisKernelVirtualQueryInfo next;
         uintptr_t probe = end;
 
         for (int hop = 0; hop < 16; ++hop) {
             if (sceKernelVirtualQuery((void*)probe, 0, &next, sizeof(next)) < 0)
                 break;
 
-            const uintptr_t ns = (uintptr_t)next.start_addr;
-            const uintptr_t ne = (uintptr_t)next.end_addr;
+            const uintptr_t ns = (uintptr_t)next.start_addr_addr;
+            const uintptr_t ne = (uintptr_t)next.end_addr_addr;
 
             if (ne <= ns || ns > g_moduleEnd || (next.prot & 1) == 0)
                 break;
@@ -86,7 +86,7 @@ static uintptr_t ReadableEnd(uintptr_t addr, size_t need) {
     if (addr < 0x10000 || addr >= 0x0000800000000000ULL || addr + need < addr)
         return 0;
 
-    SceKernelVirtualQueryInfo info;
+    OrbisKernelVirtualQueryInfo info;
     uintptr_t end = 0;
     uintptr_t probe = addr;
 
@@ -94,11 +94,11 @@ static uintptr_t ReadableEnd(uintptr_t addr, size_t need) {
         if (sceKernelVirtualQuery((void*)probe, 0, &info, sizeof(info)) < 0)
             break;
 
-        if ((info.protection & 1) == 0)
+        if ((info.prot & 1) == 0)
             break;
 
-        const uintptr_t start = (uintptr_t)info.start;
-        const uintptr_t stop = (uintptr_t)info.end;
+        const uintptr_t start = (uintptr_t)info.start_addr;
+        const uintptr_t stop = (uintptr_t)info.end_addr;
 
         if (stop <= start || probe < start || probe >= stop || (end && start > end))
             break;
@@ -193,7 +193,7 @@ bool IsPs5() {
     if (g_ps5 >= 0)
         return g_ps5 == 1;
 
-    SceKernelStat st;
+    OrbisKernelStat st;
     const char* const word = sceKernelGetFsSandboxRandomWord();
     bool found = false;
 
@@ -224,13 +224,13 @@ static uintptr_t ImportAddress(uintptr_t import, uintptr_t ownStart, uintptr_t o
 }
 
 static bool KernelLogBound() {
-    SceKernelVirtualQueryInfo info;
+    OrbisKernelVirtualQueryInfo info;
 
     if (sceKernelVirtualQuery((void*)&KernelLogBound, 0, &info, sizeof(info)) < 0)
         return false;
 
-    const uintptr_t start = (uintptr_t)info.start;
-    const uintptr_t end = (uintptr_t)info.end;
+    const uintptr_t start = (uintptr_t)info.start_addr;
+    const uintptr_t end = (uintptr_t)info.end_addr;
     const uintptr_t log = ImportAddress((uintptr_t)&mdbg_service, start, end);
     const uintptr_t kernel = ImportAddress((uintptr_t)&sceKernelUsleep, start, end);
 
