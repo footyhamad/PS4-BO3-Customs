@@ -43,8 +43,8 @@ uint64_t GetBaseAddress() {
     void* address = nullptr;
 
     while (sceKernelVirtualQuery(address, 0, &info, sizeof(info)) >= 0) {
-        const uintptr_t start = (uintptr_t)info.start_addr_addr;
-        const uintptr_t end = (uintptr_t)info.end_addr_addr;
+        const uintptr_t start = (uintptr_t)info.start_addr;
+        const uintptr_t end = (uintptr_t)info.end_addr;
 
         if (end <= start)
             break;
@@ -66,8 +66,8 @@ uint64_t GetBaseAddress() {
             if (sceKernelVirtualQuery((void*)probe, 0, &next, sizeof(next)) < 0)
                 break;
 
-            const uintptr_t ns = (uintptr_t)next.start_addr_addr;
-            const uintptr_t ne = (uintptr_t)next.end_addr_addr;
+            const uintptr_t ns = (uintptr_t)next.start_addr;
+            const uintptr_t ne = (uintptr_t)next.end_addr;
 
             if (ne <= ns || ns > g_moduleEnd || (next.prot & 1) == 0)
                 break;
