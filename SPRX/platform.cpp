@@ -269,7 +269,7 @@ static int Sink() {
         void* address = nullptr;
 
         if (sceKernelDlsym(0x2001, "sceKernelDebugOutText", &address) == 0 && address) {
-            sceKernelDebugOutText = (sceKernelDebugOutText_t)address;
+            g_sceKernelDebugOutText = (sceKernelDebugOutText_t)address;
             sink = kSinkPs4;
         }
     }
@@ -302,7 +302,7 @@ void DebugOut(const char* text) {
         if (sink == kSinkPs5)
             mdbg_service(kKernelLogText, line, nullptr);
         else
-            sceKernelDebugOutText(0, line);
+            g_sceKernelDebugOutText(0, line);
 
         text += take;
         left -= take;
