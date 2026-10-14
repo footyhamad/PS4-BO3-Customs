@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include <fcntl.h>
 #include "t7_log.hpp"
 
 #ifdef _DEBUG
@@ -243,7 +244,7 @@ static void Unlock()
 
 static void Append(const char* text, size_t size)
 {
-    const int fd = sceKernelOpen(kLogPath, SCE_KERNEL_O_WRONLY | SCE_KERNEL_O_CREAT | SCE_KERNEL_O_APPEND, 0777);
+    const int fd = sceKernelOpen(kLogPath, O_WRONLY | O_CREAT | O_APPEND, 0777);
 
     if (fd < 0)
         return;
@@ -1084,7 +1085,7 @@ void T7Log_Install(uintptr_t base)
 
     sceKernelMkdir(kLogFolder, 0777);
 
-    const int fd = sceKernelOpen(kLogPath, SCE_KERNEL_O_WRONLY | SCE_KERNEL_O_CREAT | SCE_KERNEL_O_TRUNC, 0777);
+    const int fd = sceKernelOpen(kLogPath, O_WRONLY | O_CREAT | O_TRUNC, 0777);
 
     if (fd >= 0)
         sceKernelClose(fd);
