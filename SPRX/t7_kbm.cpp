@@ -5,6 +5,7 @@
 
 #include <orbis/Sysmodule.h>
 #include <orbis/UserService.h>
+#include <orbis/_types/ime_dialog.h>
 
 #ifndef SCE_IME_KEYBOARD_EVENT_OPEN
 #define SCE_IME_KEYBOARD_EVENT_OPEN 256
