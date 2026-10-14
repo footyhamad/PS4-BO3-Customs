@@ -1,5 +1,8 @@
 #include "headers.hpp"
 #include <dirent.h>
+#ifndef DT_DIR
+#define DT_DIR 4
+#endif
 #include "t7_share.hpp"
 
 #include <orbis/Net.h>
@@ -578,7 +581,7 @@ static void Walk(const char* root, const char* rel, int depth, int kind, Served*
 
             at += entry->d_reclen;
 
-            if (entry->d_fileno == 0 || !SafeName(entry->d_name, strlen(entry->d_name)))
+            if (entry->d_ino == 0 || !SafeName(entry->d_name, strlen(entry->d_name)))
                 continue;
 
             char child[kRelMax];
