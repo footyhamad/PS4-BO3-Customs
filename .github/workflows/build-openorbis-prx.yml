@@ -82,7 +82,39 @@ jobs:
           set -euxo pipefail
           make clean
           make OO_PS4_TOOLCHAIN="$OO_PS4_TOOLCHAIN" GOLDHEN_SDK="$GOLDHEN_SDK" CC=clang CXX=clang++ LD=ld.lld
+          test -s build/BO3-Customs.elf
           test -s build/BO3-Customs.prx
+          readelf -Ws build/BO3-Customs.elf | tee build/symbols.txt
+          grep -Eq '[[:space:]]plugin_load
+
+      - name: Upload PRX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BO3-Customs-OpenOrbis-PRX
+          path: SPRX/build/BO3-Customs.prx
+          if-no-files-found: error
+          retention-days: 14
+ build/symbols.txt
+          grep -Eq '[[:space:]]plugin_unload
+
+      - name: Upload PRX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BO3-Customs-OpenOrbis-PRX
+          path: SPRX/build/BO3-Customs.prx
+          if-no-files-found: error
+          retention-days: 14
+ build/symbols.txt
+          grep -Eq '[[:space:]]module_start
+
+      - name: Upload PRX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BO3-Customs-OpenOrbis-PRX
+          path: SPRX/build/BO3-Customs.prx
+          if-no-files-found: error
+          retention-days: 14
+ build/symbols.txt
           sha256sum build/BO3-Customs.prx
 
       - name: Upload PRX artifact
