@@ -43,15 +43,15 @@ uint64_t GetBaseAddress() {
     void* address = nullptr;
 
     while (sceKernelVirtualQuery(address, 0, &info, sizeof(info)) >= 0) {
-        const uintptr_t start = (uintptr_t)info.start_addr;
-        const uintptr_t end = (uintptr_t)info.end_addr;
+        const uintptr_t start = (uintptr_t)info.unk01;
+        const uintptr_t end = (uintptr_t)info.unk02;
 
         if (end <= start)
             break;
 
         address = (void*)end;
 
-        if (info.prot != 5 || strcmp(info.name, "executable") != 0)
+        if (info.unk04 != 5 || strcmp(info.name, "executable") != 0)
             continue;
 
         cached = start;
@@ -66,10 +66,10 @@ uint64_t GetBaseAddress() {
             if (sceKernelVirtualQuery((void*)probe, 0, &next, sizeof(next)) < 0)
                 break;
 
-            const uintptr_t ns = (uintptr_t)next.start_addr;
-            const uintptr_t ne = (uintptr_t)next.end_addr;
+            const uintptr_t ns = (uintptr_t)next.unk01;
+            const uintptr_t ne = (uintptr_t)next.unk02;
 
-            if (ne <= ns || ns > g_moduleEnd || (next.prot & 1) == 0)
+            if (ne <= ns || ns > g_moduleEnd || (next.unk04 & 1) == 0)
                 break;
 
             g_moduleEnd = ne;
@@ -94,11 +94,11 @@ static uintptr_t ReadableEnd(uintptr_t addr, size_t need) {
         if (sceKernelVirtualQuery((void*)probe, 0, &info, sizeof(info)) < 0)
             break;
 
-        if ((info.prot & 1) == 0)
+        if ((info.unk04 & 1) == 0)
             break;
 
-        const uintptr_t start = (uintptr_t)info.start_addr;
-        const uintptr_t stop = (uintptr_t)info.end_addr;
+        const uintptr_t start = (uintptr_t)info.unk01;
+        const uintptr_t stop = (uintptr_t)info.unk02;
 
         if (stop <= start || probe < start || probe >= stop || (end && start > end))
             break;
@@ -229,8 +229,8 @@ static bool KernelLogBound() {
     if (sceKernelVirtualQuery((void*)&KernelLogBound, 0, &info, sizeof(info)) < 0)
         return false;
 
-    const uintptr_t start = (uintptr_t)info.start_addr;
-    const uintptr_t end = (uintptr_t)info.end_addr;
+    const uintptr_t start = (uintptr_t)info.unk01;
+    const uintptr_t end = (uintptr_t)info.unk02;
     const uintptr_t log = ImportAddress((uintptr_t)&mdbg_service, start, end);
     const uintptr_t kernel = ImportAddress((uintptr_t)&sceKernelUsleep, start, end);
 
