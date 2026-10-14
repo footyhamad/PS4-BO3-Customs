@@ -4,6 +4,7 @@
 
 #include <net.h>
 #include <atomic>
+#include <sys/stat.h>
 
 namespace T7Share
 {
@@ -592,7 +593,7 @@ static void Walk(const char* root, const char* rel, int depth, int kind, Served*
             OrbisKernelStat st;
             snprintf(file.path, sizeof(file.path), "%s/%s", root, child);
 
-            if (sceKernelStat(file.path, &st) != 0 || SCE_KERNEL_S_ISDIR(st.st_mode) || st.st_size < 0)
+            if (sceKernelStat(file.path, &st) != 0 || S_ISDIR(st.st_mode) || st.st_size < 0)
                 continue;
 
             file.size = (uint64_t)st.st_size;
