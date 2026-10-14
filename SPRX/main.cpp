@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include <fcntl.h>
 
 namespace
 {
@@ -62,7 +63,7 @@ static void* start_thread(void*)
    snprintf(path, sizeof(path), "/%s/common/lib/libSceNotification.sprx", rand);
 
    bool is_ps5 = false;
-   int fd = sceKernelOpen(path, SCE_KERNEL_O_RDONLY, 0);
+   int fd = sceKernelOpen(path, O_RDONLY, 0);
 
    if (fd >= 0)
    {
@@ -127,7 +128,7 @@ extern "C"
 {
 int module_start(size_t argc, const void* args)
 {
-    ScePthread thread;
+    OrbisPthread thread;
 
     scePthreadCreate(&thread, nullptr, start_thread, nullptr, "BO3-Customs Init");
     scePthreadJoin(thread, nullptr);
