@@ -5,6 +5,9 @@
 #include "t7_lua.hpp"
 
 #include <atomic>
+#ifndef SCE_KERNEL_PRIO_FIFO_HIGHEST
+#define SCE_KERNEL_PRIO_FIFO_HIGHEST 256
+#endif
 
 #ifdef _DEBUG
 extern "C" {
