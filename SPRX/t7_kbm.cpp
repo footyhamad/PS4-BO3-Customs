@@ -2126,7 +2126,7 @@ static uint64_t CreateCmd(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, ui
 
 static void LoadMouse()
 {
-    const int loaded = sceSysmoduleLoadModule(SCE_SYSMODULE_MOUSE);
+    const int loaded = sceSysmoduleLoadModule(ORBIS_SYSMODULE_MOUSE);
 
     if (loaded != 0)
     {
