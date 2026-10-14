@@ -652,7 +652,7 @@ static int ListFolder(const char* folder, bool folders, char names[][kListedName
 
             at += entry->d_reclen;
 
-            if (entry->d_ino == 0 || entry->d_name[0] == '.')
+            if (entry->d_name[0] == '.')
                 continue;
 
             if ((entry->d_type == DT_DIR) != folders || strlen(entry->d_name) >= kListedNameMax)
@@ -5344,7 +5344,7 @@ static int RemoveTree(const char* path, int depth)
 
         at += entry->d_reclen;
 
-        if (entry->d_ino == 0 || strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
         char child[512];
