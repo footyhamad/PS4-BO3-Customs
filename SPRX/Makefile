@@ -2,16 +2,16 @@
 # Compiles against OpenOrbis headers/libraries, then emits a native PS4 PRX.
 
 OO_PS4_TOOLCHAIN ?= $(HOME)/OpenOrbis-PS4-Toolchain
-CC       ?= clang
-CXX      ?= clang++
-LD       ?= ld.lld
+CC       := clang
+CXX      := clang++
+LD       := ld.lld
 OUT      ?= build
 TARGET   := $(OUT)/BO3-Customs.prx
 ELF      := $(OUT)/BO3-Customs.elf
 
-# libc++'s threading support needs POSIX nanosleep declarations in the FreeBSD
-# compatibility headers shipped with OpenOrbis.
-COMMON_FLAGS := --target=x86_64-pc-freebsd12-elf -DPS4 -D_POSIX_C_SOURCE=200809L -fPIC -funwind-tables -isysroot $(OO_PS4_TOOLCHAIN) -isystem $(OO_PS4_TOOLCHAIN)/include -I.
+# OpenOrbis ships a FreeBSD-targeted libc++ sysroot. Include time.h explicitly
+# so libc++'s pthread compatibility layer sees nanosleep under strict targets.
+COMMON_FLAGS := --target=x86_64-pc-freebsd12-elf -DPS4 -D_POSIX_C_SOURCE=200809L -include time.h -fPIC -funwind-tables -isysroot $(OO_PS4_TOOLCHAIN) -isystem $(OO_PS4_TOOLCHAIN)/include -I.
 CFLAGS   := $(COMMON_FLAGS) -c
 CXXFLAGS := $(COMMON_FLAGS) -std=c++20 -isystem $(OO_PS4_TOOLCHAIN)/include/c++/v1
 LIBS     := -lc -lc++ -lkernel -lSceSysmodule_stub_weak -lSceMouse_stub_weak -lSceUserService_stub_weak -lSceNet_stub_weak
