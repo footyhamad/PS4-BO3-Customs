@@ -2,7 +2,17 @@
 #include <dirent.h>
 #include "t7_share.hpp"
 
-#include <net.h>
+#include <orbis/Net.h>
+
+struct OrbisNetSockaddrIn
+{
+    uint8_t sin_len;
+    uint8_t sin_family;
+    uint16_t sin_port;
+    OrbisNetInAddr sin_addr;
+    char sin_zero[8];
+};
+
 #include <atomic>
 #include <sys/stat.h>
 
@@ -122,7 +132,7 @@ struct Session
 
 struct Stream
 {
-    SceNetId                 socket;
+    OrbisNetId                 socket;
     const std::atomic<bool>* stop;
     int                      have;
     int                      at;
@@ -394,19 +404,19 @@ static Role ReadRole()
     return role;
 }
 
-static void SetWait(SceNetId socket, int microseconds)
+static void SetWait(OrbisNetId socket, int microseconds)
 {
     sceNetSetsockopt(socket, SCE_NET_SOL_SOCKET, SCE_NET_SO_RCVTIMEO, &microseconds, sizeof(microseconds));
     sceNetSetsockopt(socket, SCE_NET_SOL_SOCKET, SCE_NET_SO_SNDTIMEO, &microseconds, sizeof(microseconds));
 }
 
-static void SetBlocking(SceNetId socket, bool blocking)
+static void SetBlocking(OrbisNetId socket, bool blocking)
 {
     int value = blocking ? 0 : 1;
     sceNetSetsockopt(socket, SCE_NET_SOL_SOCKET, SCE_NET_SO_NBIO, &value, sizeof(value));
 }
 
-static void Tune(SceNetId socket)
+static void Tune(OrbisNetId socket)
 {
     int on = 1;
     sceNetSetsockopt(socket, SCE_NET_IPPROTO_TCP, SCE_NET_TCP_NODELAY, &on, sizeof(on));
@@ -757,7 +767,7 @@ static void* Serve(void* argument)
     Stream* const stream = (Stream*)malloc(sizeof(Stream));
     Served* const files = (Served*)malloc(sizeof(Served) * kMaxEntries);
     char* const buffer = (char*)malloc(kChunk);
-    const SceNetId socket = (SceNetId)(intptr_t)argument;
+    const OrbisNetId socket = (OrbisNetId)(intptr_t)argument;
 
     if (stream && files && buffer)
     {
@@ -778,9 +788,9 @@ static void* Serve(void* argument)
     return nullptr;
 }
 
-static SceNetId Listen()
+static OrbisNetId Listen()
 {
-    const SceNetId socket = sceNetSocket("bo3c_share", SCE_NET_AF_INET, SCE_NET_SOCK_STREAM, 0);
+    const OrbisNetId socket = sceNetSocket("bo3c_share", SCE_NET_AF_INET, SCE_NET_SOCK_STREAM, 0);
 
     if (socket < 0)
         return -1;
@@ -789,13 +799,13 @@ static SceNetId Listen()
     sceNetSetsockopt(socket, SCE_NET_SOL_SOCKET, SCE_NET_SO_REUSEADDR, &on, sizeof(on));
     Tune(socket);
 
-    SceNetSockaddrIn address{};
+    OrbisNetSockaddrIn address{};
     address.sin_len = sizeof(address);
     address.sin_family = SCE_NET_AF_INET;
     address.sin_port = sceNetHtons(kPort);
     address.sin_addr.s_addr = SCE_NET_INADDR_ANY;
 
-    if (sceNetBind(socket, (const SceNetSockaddr*)&address, sizeof(address)) < 0 || sceNetListen(socket, 4) < 0)
+    if (sceNetBind(socket, (const OrbisNetSockaddr*)&address, sizeof(address)) < 0 || sceNetListen(socket, 4) < 0)
     {
         sceNetSocketClose(socket);
         return -1;
@@ -807,7 +817,7 @@ static SceNetId Listen()
 
 static void* Server(void*)
 {
-    SceNetId listener = -1;
+    OrbisNetId listener = -1;
 
     for (;;)
     {
@@ -837,9 +847,9 @@ static void* Server(void*)
             T7Log_Write("[Share] hosting a LAN lobby: listening on port %d", (int)kPort);
         }
 
-        SceNetSockaddrIn from{};
-        SceNetSocklen_t length = sizeof(from);
-        const SceNetId peer = sceNetAccept(listener, (SceNetSockaddr*)&from, &length);
+        OrbisNetSockaddrIn from{};
+        OrbisNetSocklen_t length = sizeof(from);
+        const OrbisNetId peer = sceNetAccept(listener, (OrbisNetSockaddr*)&from, &length);
 
         if (peer < 0)
         {
@@ -924,16 +934,16 @@ static bool Fail(const char* format, ...)
     return false;
 }
 
-static SceNetId Connect(uint32_t address, uint64_t limit)
+static OrbisNetId Connect(uint32_t address, uint64_t limit)
 {
-    const SceNetId socket = sceNetSocket("bo3c_fetch", SCE_NET_AF_INET, SCE_NET_SOCK_STREAM, 0);
+    const OrbisNetId socket = sceNetSocket("bo3c_fetch", SCE_NET_AF_INET, SCE_NET_SOCK_STREAM, 0);
 
     if (socket < 0)
         return -1;
 
     Tune(socket);
 
-    SceNetSockaddrIn host{};
+    OrbisNetSockaddrIn host{};
     host.sin_len = sizeof(host);
     host.sin_family = SCE_NET_AF_INET;
     host.sin_port = sceNetHtons(kPort);
@@ -947,7 +957,7 @@ static SceNetId Connect(uint32_t address, uint64_t limit)
     for (uint64_t waited = 0; !connected && !refused && waited < limit && !g_stop.load(); waited += kConnectStepUs)
     {
         int problem = 0;
-        SceNetSocklen_t size = sizeof(problem);
+        OrbisNetSocklen_t size = sizeof(problem);
 
         if (waited && sceNetGetsockopt(socket, SCE_NET_SOL_SOCKET, SCE_NET_SO_ERROR, &problem, &size) >= 0 && problem != 0)
         {
@@ -955,7 +965,7 @@ static SceNetId Connect(uint32_t address, uint64_t limit)
             break;
         }
 
-        const int result = sceNetConnect(socket, (const SceNetSockaddr*)&host, sizeof(host));
+        const int result = sceNetConnect(socket, (const OrbisNetSockaddr*)&host, sizeof(host));
 
         if (result >= 0 || result == SCE_NET_ERROR_EISCONN)
             connected = true;
@@ -1320,7 +1330,7 @@ static bool Exchange(Stream& stream, Entry* entries, char* buffer, bool lastTry)
     return false;
 }
 
-static SceNetId Reach(Session& session)
+static OrbisNetId Reach(Session& session)
 {
     const uint64_t limit = session.hostCount > 1 ? kConnectManyUs : kConnectWaitUs;
 
@@ -1331,7 +1341,7 @@ static SceNetId Reach(Session& session)
         if (!address || (i >= 0 && address == session.reached))
             continue;
 
-        const SceNetId socket = Connect(address, limit);
+        const OrbisNetId socket = Connect(address, limit);
         const uint8_t* const b = (const uint8_t*)&address;
 
         if (socket >= 0)
