@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include <fcntl.h>
 #include "t7_lua.hpp"
 #include "t7_maps.hpp"
 #include "t7_config.hpp"
@@ -447,7 +448,7 @@ static char* ReadScript(const char* name)
     char path[256];
     snprintf(path, sizeof(path), "%s/ui_scripts/%s", "/data/BO3-Customs", name);
 
-    const int fd = sceKernelOpen(path, SCE_KERNEL_O_RDONLY, 0);
+    const int fd = sceKernelOpen(path, O_RDONLY, 0);
 
     if (fd < 0)
         return nullptr;
@@ -1173,7 +1174,7 @@ static const RawFileAsset* LuiFileFor(const char* name)
             char path[256];
             snprintf(path, sizeof(path), "%s/lui/%s", "/data/BO3-Customs", file.asset);
 
-            const int fd = sceKernelOpen(path, SCE_KERNEL_O_RDONLY, 0);
+            const int fd = sceKernelOpen(path, O_RDONLY, 0);
 
             if (fd < 0)
                 return nullptr;
