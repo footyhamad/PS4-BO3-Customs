@@ -1409,6 +1409,24 @@ __asm__(
     "    movq %fs:0, %rax\n"
     "    retq\n");
 
+bool T7Lua_RuntimeReady(uintptr_t base)
+{
+    using namespace T7Lua;
+
+    if (!base ||
+        !RangeReadable(base + kUiReady, sizeof(uint8_t)) ||
+        !RangeReadable(base + kLuaState, sizeof(uintptr_t)))
+        return false;
+
+    if ((*(const uint8_t*)(base + kUiReady) & 1) == 0)
+        return false;
+
+    const uintptr_t state = *(const uintptr_t*)(base + kLuaState);
+    return state >= 0x10000 &&
+           state < 0x0000800000000000ULL &&
+           RangeReadable(state, 0x80);
+}
+
 void T7Lua_Install(uintptr_t base)
 {
     using namespace T7Lua;
