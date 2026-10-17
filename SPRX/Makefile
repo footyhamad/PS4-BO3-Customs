@@ -19,16 +19,16 @@ GOLDHEN_SDK ?= $(HOME)/GoldHEN_Plugins_SDK
 
 # Diagnostic build: link only the no-op entrypoint and the official-style CRT.
 # This deliberately excludes every mod subsystem and its imported APIs.
+LDFLAGS  := -m elf_x86_64 -pie --script $(OO_PS4_TOOLCHAIN)/link.x -e _init --eh-frame-hdr -L$(OO_PS4_TOOLCHAIN)/lib $(LIBS) $(GOLDHEN_SDK)/build/crtprx.o
+
+CPP_SOURCES := $(wildcard *.cpp)
+C_SOURCES   := $(wildcard *.c)
 ifeq ($(BOOT_PROBE),1)
 CXXFLAGS += -DBO3_CUSTOMS_BOOT_PROBE
 CPP_SOURCES := main.cpp
 C_SOURCES :=
 LIBS := -lSceLibcInternal -lkernel -lSceSysmodule
 endif
-LDFLAGS  := -m elf_x86_64 -pie --script $(OO_PS4_TOOLCHAIN)/link.x -e _init --eh-frame-hdr -L$(OO_PS4_TOOLCHAIN)/lib $(LIBS) $(GOLDHEN_SDK)/build/crtprx.o
-
-CPP_SOURCES := $(wildcard *.cpp)
-C_SOURCES   := $(wildcard *.c)
 OBJECTS     := $(patsubst %.cpp,$(OUT)/%.o,$(CPP_SOURCES)) $(patsubst %.c,$(OUT)/%.o,$(C_SOURCES))
 
 .PHONY: all clean
