@@ -16,6 +16,15 @@ CFLAGS   := $(COMMON_FLAGS) -c
 CXXFLAGS := $(COMMON_FLAGS) -std=c++20 -isystem $(OO_PS4_TOOLCHAIN)/include/c++/v1
 LIBS     := -lc -lc++ -lkernel -lSceSysmodule -lSceMouse -lSceUserService -lSceNet
 GOLDHEN_SDK ?= $(HOME)/GoldHEN_Plugins_SDK
+
+# Diagnostic build: link only the no-op entrypoint and the official-style CRT.
+# This deliberately excludes every mod subsystem and its imported APIs.
+ifeq ($(BOOT_PROBE),1)
+CXXFLAGS += -DBO3_CUSTOMS_BOOT_PROBE
+CPP_SOURCES := main.cpp
+C_SOURCES :=
+LIBS := -lSceLibcInternal -lkernel -lSceSysmodule
+endif
 LDFLAGS  := -m elf_x86_64 -pie --script $(OO_PS4_TOOLCHAIN)/link.x -e _init --eh-frame-hdr -L$(OO_PS4_TOOLCHAIN)/lib $(LIBS) $(GOLDHEN_SDK)/build/crtprx.o
 
 CPP_SOURCES := $(wildcard *.cpp)
