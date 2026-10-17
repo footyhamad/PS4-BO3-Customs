@@ -5563,6 +5563,8 @@ static void InstallHooks(uintptr_t base)
 #endif
 }
 
+}
+
 bool T7Maps_BuildSupported(uintptr_t base)
 {
     return base != 0 && T7Maps::BuildMatches(base);
