@@ -8,6 +8,8 @@ inline const char* const k_driveRoots[] =
     "usb0", "usb1", "usb2", "usb3", "usb4", "usb5", "usb6", "usb7",
 };
 
+bool T7Maps_BuildSupported(uintptr_t base);
+
 void T7Maps_Install(uintptr_t base);
 
 int T7Maps_MapCount();
