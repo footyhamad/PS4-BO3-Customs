@@ -5258,11 +5258,6 @@ static bool BuildMatches(uintptr_t base)
     return true;
 }
 
-bool T7Maps_BuildSupported(uintptr_t base)
-{
-    return base != 0 && BuildMatches(base);
-}
-
 static void ScanAll()
 {
     g_packageCount = 0;
@@ -5567,6 +5562,10 @@ static void InstallHooks(uintptr_t base)
     }
 #endif
 }
+
+bool T7Maps_BuildSupported(uintptr_t base)
+{
+    return base != 0 && T7Maps::BuildMatches(base);
 }
 
 void T7Maps_Install(uintptr_t base)
