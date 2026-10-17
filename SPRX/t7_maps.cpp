@@ -5258,6 +5258,11 @@ static bool BuildMatches(uintptr_t base)
     return true;
 }
 
+bool T7Maps_BuildSupported(uintptr_t base)
+{
+    return base != 0 && BuildMatches(base);
+}
+
 static void ScanAll()
 {
     g_packageCount = 0;
