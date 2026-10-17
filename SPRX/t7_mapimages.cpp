@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include <fcntl.h>
 #include "t7_mapimages.hpp"
 #include "t7_maps.hpp"
 #include "png.hpp"
@@ -95,12 +96,12 @@ static bool IsMapToken(const char* name)
 
 static uint8_t* ReadWholeFile(const char* path, size_t* outSize)
 {
-    SceKernelStat st;
+    OrbisKernelStat st;
 
     if (sceKernelStat(path, &st) != 0 || st.st_size <= 0 || (size_t)st.st_size > kMaxFileBytes)
         return nullptr;
 
-    const int fd = sceKernelOpen(path, SCE_KERNEL_O_RDONLY, 0);
+    const int fd = sceKernelOpen(path, O_RDONLY, 0);
 
     if (fd < 0)
         return nullptr;

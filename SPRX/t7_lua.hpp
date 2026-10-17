@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+bool T7Lua_RuntimeReady(uintptr_t base);
+
 void T7Lua_Install(uintptr_t base);
 
 void T7Lua_Tick();

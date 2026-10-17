@@ -13,25 +13,7 @@ namespace {
         kNotificationRequestWithIcon = 1,
     };
 
-    struct NotificationRequest {
-        NotificationType type;
-        int32_t reqId;
-        int32_t priority;
-        int32_t msgId;
-        int32_t targetId;
-        int32_t userId;
-        int32_t unk1;
-        int32_t unk2;
-        int32_t appId;
-        int32_t errorNum;
-        int32_t unk3;
-        uint8_t useIconImageUri;
-        char message[1024];
-        char iconUri[1024];
-        char unk[1024];
-    };
-
-    using SendNotification_t = int (*)(int, void*, size_t, int);
+    using SendNotification_t = int32_t (*)(int32_t, OrbisNotificationRequest*, size_t, int32_t);
     SendNotification_t g_sendNotification = nullptr;
     bool g_notificationReady = false;
 
@@ -47,7 +29,6 @@ namespace {
 }
 
 extern "C" {
-    int sceKernelSendNotificationRequest(int device, void* request, size_t size, int block);
     int mdbg_service(int command, void* arg1, void* arg2);
     const char* sceKernelGetFsSandboxRandomWord();
 }
@@ -58,19 +39,19 @@ uint64_t GetBaseAddress() {
     if (cached)
         return cached;
 
-    SceKernelVirtualQueryInfo info;
+    OrbisKernelVirtualQueryInfo info;
     void* address = nullptr;
 
-    while (sceKernelVirtualQuery(address, SCE_KERNEL_VQ_FIND_NEXT, &info, sizeof(info)) >= 0) {
-        const uintptr_t start = (uintptr_t)info.start;
-        const uintptr_t end = (uintptr_t)info.end;
+    while (sceKernelVirtualQuery(address, 0, &info, sizeof(info)) >= 0) {
+        const uintptr_t start = (uintptr_t)info.unk01;
+        const uintptr_t end = (uintptr_t)info.unk02;
 
         if (end <= start)
             break;
 
         address = (void*)end;
 
-        if (info.protection != 5 || strcmp(info.name, "executable") != 0)
+        if (info.unk04 != 5 || strcmp(info.name, "executable") != 0)
             continue;
 
         cached = start;
@@ -78,17 +59,17 @@ uint64_t GetBaseAddress() {
         g_execEnd = end;
         g_moduleEnd = end;
 
-        SceKernelVirtualQueryInfo next;
+        OrbisKernelVirtualQueryInfo next;
         uintptr_t probe = end;
 
         for (int hop = 0; hop < 16; ++hop) {
             if (sceKernelVirtualQuery((void*)probe, 0, &next, sizeof(next)) < 0)
                 break;
 
-            const uintptr_t ns = (uintptr_t)next.start;
-            const uintptr_t ne = (uintptr_t)next.end;
+            const uintptr_t ns = (uintptr_t)next.unk01;
+            const uintptr_t ne = (uintptr_t)next.unk02;
 
-            if (ne <= ns || ns > g_moduleEnd || (next.protection & 1) == 0)
+            if (ne <= ns || ns > g_moduleEnd || (next.unk04 & 1) == 0)
                 break;
 
             g_moduleEnd = ne;
@@ -105,7 +86,7 @@ static uintptr_t ReadableEnd(uintptr_t addr, size_t need) {
     if (addr < 0x10000 || addr >= 0x0000800000000000ULL || addr + need < addr)
         return 0;
 
-    SceKernelVirtualQueryInfo info;
+    OrbisKernelVirtualQueryInfo info;
     uintptr_t end = 0;
     uintptr_t probe = addr;
 
@@ -113,11 +94,11 @@ static uintptr_t ReadableEnd(uintptr_t addr, size_t need) {
         if (sceKernelVirtualQuery((void*)probe, 0, &info, sizeof(info)) < 0)
             break;
 
-        if ((info.protection & 1) == 0)
+        if ((info.unk04 & 1) == 0)
             break;
 
-        const uintptr_t start = (uintptr_t)info.start;
-        const uintptr_t stop = (uintptr_t)info.end;
+        const uintptr_t start = (uintptr_t)info.unk01;
+        const uintptr_t stop = (uintptr_t)info.unk02;
 
         if (stop <= start || probe < start || probe >= stop || (end && start > end))
             break;
@@ -190,14 +171,14 @@ void Notify(const char* fmt, ...) {
             g_sendNotification = (SendNotification_t)address;
     }
 
-    NotificationRequest request{};
+    OrbisNotificationRequest request{};
 
     va_list va;
     va_start(va, fmt);
     vsnprintf(request.message, sizeof(request.message), fmt, va);
     va_end(va);
 
-    request.type = kNotificationRequest;
+    request.type = NotificationRequest;
     request.targetId = -1;
     request.useIconImageUri = 1;
     snprintf(request.iconUri, sizeof(request.iconUri), "%s", "cxml://psnotification/tex_icon_ribbon");
@@ -212,7 +193,7 @@ bool IsPs5() {
     if (g_ps5 >= 0)
         return g_ps5 == 1;
 
-    SceKernelStat st;
+    OrbisKernelStat st;
     const char* const word = sceKernelGetFsSandboxRandomWord();
     bool found = false;
 
@@ -243,13 +224,13 @@ static uintptr_t ImportAddress(uintptr_t import, uintptr_t ownStart, uintptr_t o
 }
 
 static bool KernelLogBound() {
-    SceKernelVirtualQueryInfo info;
+    OrbisKernelVirtualQueryInfo info;
 
     if (sceKernelVirtualQuery((void*)&KernelLogBound, 0, &info, sizeof(info)) < 0)
         return false;
 
-    const uintptr_t start = (uintptr_t)info.start;
-    const uintptr_t end = (uintptr_t)info.end;
+    const uintptr_t start = (uintptr_t)info.unk01;
+    const uintptr_t end = (uintptr_t)info.unk02;
     const uintptr_t log = ImportAddress((uintptr_t)&mdbg_service, start, end);
     const uintptr_t kernel = ImportAddress((uintptr_t)&sceKernelUsleep, start, end);
 
@@ -269,7 +250,7 @@ static int Sink() {
         void* address = nullptr;
 
         if (sceKernelDlsym(0x2001, "sceKernelDebugOutText", &address) == 0 && address) {
-            sceKernelDebugOutText = (sceKernelDebugOutText_t)address;
+            g_sceKernelDebugOutText = (sceKernelDebugOutText_t)address;
             sink = kSinkPs4;
         }
     }
@@ -302,7 +283,7 @@ void DebugOut(const char* text) {
         if (sink == kSinkPs5)
             mdbg_service(kKernelLogText, line, nullptr);
         else
-            sceKernelDebugOutText(0, line);
+            g_sceKernelDebugOutText(0, line);
 
         text += take;
         left -= take;

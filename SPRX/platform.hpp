@@ -1,7 +1,7 @@
 #pragma once
 
 typedef int (*sceKernelDebugOutText_t)(int32_t dbg_channel, const char* text);
-inline sceKernelDebugOutText_t sceKernelDebugOutText = nullptr;
+inline sceKernelDebugOutText_t g_sceKernelDebugOutText = nullptr;
 
 uint64_t GetBaseAddress();
 

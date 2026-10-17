@@ -3,6 +3,7 @@
 #include "t7_log.hpp"
 
 #include <atomic>
+#include <fcntl.h>
 
 namespace T7Config
 {
@@ -35,7 +36,7 @@ struct Lock
 
 static int64_t ReadAll(const char* path, char* out, size_t size)
 {
-    const int fd = sceKernelOpen(path, SCE_KERNEL_O_RDONLY, 0);
+    const int fd = sceKernelOpen(path, O_RDONLY, 0);
 
     if (fd < 0)
         return -1;
@@ -61,7 +62,7 @@ static bool WriteAll(const char* text, size_t length)
 {
     sceKernelMkdir(k_folder, 0777);
 
-    const int fd = sceKernelOpen(k_temp, SCE_KERNEL_O_WRONLY | SCE_KERNEL_O_CREAT | SCE_KERNEL_O_TRUNC, 0777);
+    const int fd = sceKernelOpen(k_temp, O_WRONLY | O_CREAT | O_TRUNC, 0777);
 
     if (fd < 0)
         return false;
@@ -112,7 +113,7 @@ static void Migrate()
 
     g_migrated = true;
 
-    SceKernelStat st;
+    OrbisKernelStat st;
 
     if (sceKernelStat(k_path, &st) == 0)
         return;

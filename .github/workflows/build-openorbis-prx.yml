@@ -1,0 +1,122 @@
+name: Build OpenOrbis PRX
+
+on:
+  push:
+    branches:
+      - openorbis-prx-output
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-prx:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get install -y clang lld make binutils file
+          for tool in clang clang++ ld.lld make objcopy file curl git readelf; do command -v "$tool"; done
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+
+      - name: Download OpenOrbis toolchain
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/openorbis"
+          curl -fL --retry 3 \
+            https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz \
+            -o "$RUNNER_TEMP/openorbis.tar.gz"
+          tar -xzf "$RUNNER_TEMP/openorbis.tar.gz" -C "$RUNNER_TEMP/openorbis" --strip-components=1
+          TOOLCHAIN="$(find "$RUNNER_TEMP/openorbis" -name link.x -printf '%h\n' -quit)"
+          test -n "$TOOLCHAIN"
+          git clone --depth=1 https://github.com/OpenOrbis/create-fself.git "$RUNNER_TEMP/create-fself"
+          cat > "$RUNNER_TEMP/create-fself/cmd/create-fself/go.mod" <<'EOF'
+          module create-fself
+
+          go 1.17
+
+          require (
+            github.com/OpenOrbis/create-fself/pkg/fself v0.0.0-00010101000000-000000000000
+            github.com/OpenOrbis/create-fself/pkg/oelf v0.0.0-00010101000000-000000000000
+          )
+
+          replace (
+            github.com/OpenOrbis/create-fself/pkg/fself => ../../pkg/fself
+            github.com/OpenOrbis/create-fself/pkg/oelf => ../../pkg/oelf
+          )
+          EOF
+          (cd "$RUNNER_TEMP/create-fself/cmd/create-fself" && go build -o "$TOOLCHAIN/bin/linux/create-fself")
+          test -x "$TOOLCHAIN/bin/linux/create-fself"
+          echo "OO_PS4_TOOLCHAIN=$TOOLCHAIN" >> "$GITHUB_ENV"
+          echo "OpenOrbis toolchain: $TOOLCHAIN"
+          "$TOOLCHAIN/bin/linux/create-fself" -h || true
+
+      - name: Prepare GoldHEN PRX startup
+        run: |
+          set -euxo pipefail
+          git clone --depth=1 https://github.com/GoldHEN/GoldHEN_Plugins_SDK.git "$RUNNER_TEMP/GoldHEN_Plugins_SDK"
+          mkdir -p "$RUNNER_TEMP/GoldHEN_Plugins_SDK/build"
+          clang -target x86_64-pc-linux-gnu -ffreestanding -nostdlib -fno-builtin -fPIC \
+            -isysroot "$OO_PS4_TOOLCHAIN" -isystem "$OO_PS4_TOOLCHAIN/include" \
+            -c "$RUNNER_TEMP/GoldHEN_Plugins_SDK/crt/crtprx.c" \
+            -o "$RUNNER_TEMP/GoldHEN_Plugins_SDK/build/crtprx.o"
+          test -s "$RUNNER_TEMP/GoldHEN_Plugins_SDK/build/crtprx.o"
+          echo "GOLDHEN_SDK=$RUNNER_TEMP/GoldHEN_Plugins_SDK" >> "$GITHUB_ENV"
+
+      - name: Build and verify PRX
+        working-directory: SPRX
+        run: |
+          set -euxo pipefail
+          make clean
+          make OO_PS4_TOOLCHAIN="$OO_PS4_TOOLCHAIN" GOLDHEN_SDK="$GOLDHEN_SDK" CC=clang CXX=clang++ LD=ld.lld
+          test -s build/BO3-Customs.elf
+          test -s build/BO3-Customs.prx
+          readelf -Ws build/BO3-Customs.elf | tee build/symbols.txt
+          grep -Fq 'plugin_load' build/symbols.txt
+          grep -Fq 'plugin_unload' build/symbols.txt
+          grep -Fq 'module_start' build/symbols.txt
+          sha256sum build/BO3-Customs.prx
+          file build/BO3-Customs.prx
+
+      - name: Upload PRX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BO3-Customs-OpenOrbis-PRX
+          path: SPRX/build/BO3-Customs.prx
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build minimal no-hook boot probe
+        working-directory: SPRX
+        run: |
+          set -euxo pipefail
+          make clean
+          make OO_PS4_TOOLCHAIN="$OO_PS4_TOOLCHAIN" GOLDHEN_SDK="$GOLDHEN_SDK" CC=clang CXX=clang++ LD=ld.lld BOOT_PROBE=1
+          test -s build/BO3-Customs.elf
+          test -s build/BO3-Customs.prx
+          readelf -Ws build/BO3-Customs.elf | tee build/boot-probe-symbols.txt
+          grep -Fq 'plugin_load' build/boot-probe-symbols.txt
+          grep -Fq 'plugin_unload' build/boot-probe-symbols.txt
+          grep -Fq 'module_start' build/boot-probe-symbols.txt
+          sha256sum build/BO3-Customs.prx
+          file build/BO3-Customs.prx
+
+      - name: Upload minimal no-hook boot probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: BO3-Customs-BOOT-PROBE
+          path: SPRX/build/BO3-Customs.prx
+          if-no-files-found: error
+          retention-days: 14

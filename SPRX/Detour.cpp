@@ -1,6 +1,5 @@
 #include "headers.hpp"
 
-#define VM_PROT_ALL (PROT_READ | PROT_WRITE | PROT_EXEC)
 
 #define DETOUR_REL32_RANGE 0x7FF00000ULL
 

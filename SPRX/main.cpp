@@ -1,4 +1,44 @@
+#ifdef BO3_CUSTOMS_BOOT_PROBE
+#include <stddef.h>
+#include <stdint.h>
+
+// Diagnostic-only GoldHEN/OpenOrbis PRX. No game reads, notifications,
+// threads, memory patches, detours, or mod initialization.
+extern "C" {
+__attribute__((visibility("default")))
+int32_t plugin_load(int32_t argc, const char* argv[])
+{
+    (void)argc;
+    (void)argv;
+    return 0;
+}
+
+__attribute__((visibility("default")))
+int32_t plugin_unload(int32_t argc, const char* argv[])
+{
+    (void)argc;
+    (void)argv;
+    return 0;
+}
+
+int module_start(size_t argc, const void* args)
+{
+    (void)argc;
+    (void)args;
+    return 0;
+}
+
+int module_stop(size_t argc, const void* args)
+{
+    (void)argc;
+    (void)args;
+    return 0;
+}
+}
+#else
 #include "headers.hpp"
+#include <fcntl.h>
+#include <atomic>
 
 namespace
 {
@@ -33,7 +73,7 @@ bool IsBlackOps3(uintptr_t base)
 
 uintptr_t WaitForBlackOps3()
 {
-    for (int attempt = 0; attempt < 100; ++attempt)
+    for (int attempt = 0; attempt < 6000; ++attempt)
     {
         const uintptr_t base = (uintptr_t)GetBaseAddress();
 
@@ -54,7 +94,47 @@ static void* start_thread(void*)
    const uintptr_t base = WaitForBlackOps3();
 
    if (!base)
-        return nullptr;
+   {
+       Notify("BO3 Customs: BO3 v1.33 was not detected after 10 minutes");
+       return nullptr;
+   }
+
+   // Never install offsets/hooks into an executable whose BO3 v1.33
+   // prologues do not match. A title string alone is not a build check.
+   if (!T7Maps_BuildSupported(base))
+   {
+       Notify("BO3 Customs: startup stopped; BO3 v1.33 signatures did not match");
+       return nullptr;
+   }
+
+   // The game executable and static strings appear before the frontend is
+   // initialized. Wait until its UI/Lua runtime is live, then let startup settle
+   // before patching any code so we do not race BO3's early initialization.
+   bool frontendReady = false;
+   for (int attempt = 0; attempt < 6000; ++attempt)
+   {
+       if (T7Lua_RuntimeReady(base))
+       {
+           frontendReady = true;
+           break;
+       }
+
+       sceKernelUsleep(100 * 1000);
+   }
+
+   if (!frontendReady)
+   {
+       Notify("BO3 Customs: frontend did not become ready; hooks were not installed");
+       return nullptr;
+   }
+
+   sceKernelUsleep(1500 * 1000);
+
+   if (!T7Maps_BuildSupported(base) || !T7Lua_RuntimeReady(base))
+   {
+       Notify("BO3 Customs: startup state changed; hooks were not installed");
+       return nullptr;
+   }
 
    const char* rand = sceKernelGetFsSandboxRandomWord();
 
@@ -62,7 +142,7 @@ static void* start_thread(void*)
    snprintf(path, sizeof(path), "/%s/common/lib/libSceNotification.sprx", rand);
 
    bool is_ps5 = false;
-   int fd = sceKernelOpen(path, SCE_KERNEL_O_RDONLY, 0);
+   int fd = sceKernelOpen(path, O_RDONLY, 0);
 
    if (fd >= 0)
    {
@@ -123,20 +203,69 @@ static void* start_thread(void*)
     return nullptr;
 }
 
-extern "C"
+namespace
 {
-int module_start(size_t argc, const void* args)
-{
-    ScePthread thread;
+std::atomic<bool> g_pluginStarted{false};
 
-    scePthreadCreate(&thread, nullptr, start_thread, nullptr, "BO3-Customs Init");
-    scePthreadJoin(thread, nullptr);
+int StartPlugin()
+{
+    bool expected = false;
+    if (!g_pluginStarted.compare_exchange_strong(expected, true))
+        return 0;
+
+    Notify("BO3 Customs plugin started; waiting for BO3 v1.33");
+
+    OrbisPthread thread{};
+    const int createResult = scePthreadCreate(&thread, nullptr, start_thread, nullptr, "BO3-Customs Init");
+    if (createResult != 0)
+    {
+        g_pluginStarted.store(false);
+        Notify("BO3 Customs: failed to start initialization thread (%d)", createResult);
+        return createResult;
+    }
+
+    const int detachResult = scePthreadDetach(thread);
+    if (detachResult != 0)
+    {
+        Notify("BO3 Customs: failed to detach initialization thread (%d)", detachResult);
+        return detachResult;
+    }
 
     return 0;
+}
+}
+
+extern "C"
+{
+__attribute__((visibility("default")))
+int32_t plugin_load(int32_t argc, const char* argv[])
+{
+    (void)argc;
+    (void)argv;
+    return StartPlugin();
+}
+
+__attribute__((visibility("default")))
+int32_t plugin_unload(int32_t argc, const char* argv[])
+{
+    (void)argc;
+    (void)argv;
+    return 0;
+}
+
+int module_start(size_t argc, const void* args)
+{
+    (void)argc;
+    (void)args;
+    return StartPlugin();
 }
 
 int module_stop(size_t argc, const void* args)
 {
+    (void)argc;
+    (void)args;
     return 0;
 }
 }
+
+#endif // BO3_CUSTOMS_BOOT_PROBE
