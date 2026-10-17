@@ -61,6 +61,43 @@ static void* start_thread(void*)
        return nullptr;
    }
 
+   // Never install offsets/hooks into an executable whose BO3 v1.33
+   // prologues do not match. A title string alone is not a build check.
+   if (!T7Maps_BuildSupported(base))
+   {
+       Notify("BO3 Customs: startup stopped; BO3 v1.33 signatures did not match");
+       return nullptr;
+   }
+
+   // The game executable and static strings appear before the frontend is
+   // initialized. Wait until its UI/Lua runtime is live, then let startup settle
+   // before patching any code so we do not race BO3's early initialization.
+   bool frontendReady = false;
+   for (int attempt = 0; attempt < 6000; ++attempt)
+   {
+       if (T7Lua_RuntimeReady(base))
+       {
+           frontendReady = true;
+           break;
+       }
+
+       sceKernelUsleep(100 * 1000);
+   }
+
+   if (!frontendReady)
+   {
+       Notify("BO3 Customs: frontend did not become ready; hooks were not installed");
+       return nullptr;
+   }
+
+   sceKernelUsleep(1500 * 1000);
+
+   if (!T7Maps_BuildSupported(base) || !T7Lua_RuntimeReady(base))
+   {
+       Notify("BO3 Customs: startup state changed; hooks were not installed");
+       return nullptr;
+   }
+
    const char* rand = sceKernelGetFsSandboxRandomWord();
 
    char path[256 * 2];
