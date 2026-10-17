@@ -35,7 +35,7 @@ bool IsBlackOps3(uintptr_t base)
 
 uintptr_t WaitForBlackOps3()
 {
-    for (int attempt = 0; attempt < 100; ++attempt)
+    for (int attempt = 0; attempt < 6000; ++attempt)
     {
         const uintptr_t base = (uintptr_t)GetBaseAddress();
 
@@ -56,7 +56,10 @@ static void* start_thread(void*)
    const uintptr_t base = WaitForBlackOps3();
 
    if (!base)
-        return nullptr;
+   {
+       Notify("BO3 Customs: BO3 v1.33 was not detected after 10 minutes");
+       return nullptr;
+   }
 
    const char* rand = sceKernelGetFsSandboxRandomWord();
 
@@ -135,15 +138,25 @@ int StartPlugin()
     if (!g_pluginStarted.compare_exchange_strong(expected, true))
         return 0;
 
+    Notify("BO3 Customs plugin started; waiting for BO3 v1.33");
+
     OrbisPthread thread{};
     const int createResult = scePthreadCreate(&thread, nullptr, start_thread, nullptr, "BO3-Customs Init");
     if (createResult != 0)
     {
         g_pluginStarted.store(false);
+        Notify("BO3 Customs: failed to start initialization thread (%d)", createResult);
         return createResult;
     }
 
-    return scePthreadJoin(thread, nullptr);
+    const int detachResult = scePthreadDetach(thread);
+    if (detachResult != 0)
+    {
+        Notify("BO3 Customs: failed to detach initialization thread (%d)", detachResult);
+        return detachResult;
+    }
+
+    return 0;
 }
 }
 
