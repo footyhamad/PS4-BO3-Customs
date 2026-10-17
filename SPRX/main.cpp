@@ -1,3 +1,41 @@
+#ifdef BO3_CUSTOMS_BOOT_PROBE
+#include <stddef.h>
+#include <stdint.h>
+
+// Diagnostic-only GoldHEN/OpenOrbis PRX. No game reads, notifications,
+// threads, memory patches, detours, or mod initialization.
+extern "C" {
+__attribute__((visibility("default")))
+int32_t plugin_load(int32_t argc, const char* argv[])
+{
+    (void)argc;
+    (void)argv;
+    return 0;
+}
+
+__attribute__((visibility("default")))
+int32_t plugin_unload(int32_t argc, const char* argv[])
+{
+    (void)argc;
+    (void)argv;
+    return 0;
+}
+
+int module_start(size_t argc, const void* args)
+{
+    (void)argc;
+    (void)args;
+    return 0;
+}
+
+int module_stop(size_t argc, const void* args)
+{
+    (void)argc;
+    (void)args;
+    return 0;
+}
+}
+#else
 #include "headers.hpp"
 #include <fcntl.h>
 #include <atomic>
@@ -229,3 +267,5 @@ int module_stop(size_t argc, const void* args)
     return 0;
 }
 }
+
+#endif // BO3_CUSTOMS_BOOT_PROBE
