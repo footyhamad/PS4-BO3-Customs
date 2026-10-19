@@ -14,12 +14,12 @@ ELF      := $(OUT)/BO3-Customs.elf
 COMMON_FLAGS := --target=x86_64-pc-freebsd12-elf -DPS4 -D_POSIX_C_SOURCE=200809L -include time.h -fPIC -funwind-tables -isysroot $(OO_PS4_TOOLCHAIN) -isystem $(OO_PS4_TOOLCHAIN)/include -I.
 CFLAGS   := $(COMMON_FLAGS) -c
 CXXFLAGS := $(COMMON_FLAGS) -std=c++20 -isystem $(OO_PS4_TOOLCHAIN)/include/c++/v1
-LIBS     := -lc -lc++ -lkernel -lSceSysmodule -lSceMouse -lSceUserService -lSceNet
+LIBS     := -lSceLibcInternal -lc++ -lkernel -lSceSysmodule -lSceMouse -lSceUserService -lSceNet
 GOLDHEN_SDK ?= $(HOME)/GoldHEN_Plugins_SDK
 
 # Diagnostic build: link only the no-op entrypoint and the official-style CRT.
 # This deliberately excludes every mod subsystem and its imported APIs.
-LDFLAGS  = -m elf_x86_64 -pie --script $(OO_PS4_TOOLCHAIN)/link.x -e _init --eh-frame-hdr -L$(OO_PS4_TOOLCHAIN)/lib $(LIBS) $(GOLDHEN_SDK)/build/crtprx.o
+LDFLAGS  = -m elf_x86_64 -pie --script $(OO_PS4_TOOLCHAIN)/link.x -e _init --eh-frame-hdr -L$(OO_PS4_TOOLCHAIN)/lib $(LIBS)
 
 CPP_SOURCES := $(wildcard *.cpp)
 C_SOURCES   := $(wildcard *.c)
@@ -46,8 +46,9 @@ $(OUT)/%.o: %.cpp | $(OUT)
 $(OUT)/%.o: %.c | $(OUT)
 	$(CC) $(CFLAGS) -o "$@" "$<"
 
-$(ELF): $(OBJECTS)
-	$(LD) $(OBJECTS) -o "$@" $(LDFLAGS)
+$(ELF): $(OBJECTS) $(GOLDHEN_SDK)/build/crtprx.o
+	@test -s "$(GOLDHEN_SDK)/build/crtprx.o"
+	$(LD) "$(GOLDHEN_SDK)/build/crtprx.o" $(OBJECTS) -o "$@" $(LDFLAGS)
 
 $(TARGET): $(ELF)
 	OO_PS4_TOOLCHAIN="$(OO_PS4_TOOLCHAIN)" "$(OO_PS4_TOOLCHAIN)/bin/linux/create-fself" -in="$<" --out="$(OUT)/BO3-Customs.oelf" --lib="$@" --paid 0x3800000000000011
