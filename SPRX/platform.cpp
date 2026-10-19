@@ -162,15 +162,6 @@ bool SafeStrStr(uintptr_t addr, const char* target, size_t maxScan) {
 }
 
 void Notify(const char* fmt, ...) {
-    if (!g_notificationReady) {
-        g_notificationReady = true;
-
-        void* address = nullptr;
-
-        if (sceKernelDlsym(0x2001, "sceKernelSendNotificationRequest", &address) == 0 && address)
-            g_sendNotification = (SendNotification_t)address;
-    }
-
     OrbisNotificationRequest request{};
 
     va_list va;
@@ -179,14 +170,19 @@ void Notify(const char* fmt, ...) {
     va_end(va);
 
     request.type = NotificationRequest;
+    request.unk3 = 0;
     request.targetId = -1;
     request.useIconImageUri = 1;
     snprintf(request.iconUri, sizeof(request.iconUri), "%s", "cxml://psnotification/tex_icon_ribbon");
 
-    if (g_sendNotification)
-        g_sendNotification(0, &request, sizeof(request), 0);
-    else
-        sceKernelSendNotificationRequest(0, &request, sizeof(request), 0);
+    // Use the same direct kernel notification call as the official GoldHEN
+    // plugin template. The previous dlsym-first path could silently route to
+    // an invalid or unavailable export, while discarding the return code.
+    const int result = sceKernelSendNotificationRequest(0, &request, sizeof(request), 0);
+
+    char trace[256];
+    snprintf(trace, sizeof(trace), "Notify() result=%d text=%.150s", result, request.message);
+    DebugOut(trace);
 }
 
 bool IsPs5() {
