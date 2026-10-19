@@ -17,8 +17,8 @@ CXXFLAGS := $(COMMON_FLAGS) -std=c++20 -isystem $(OO_PS4_TOOLCHAIN)/include/c++/
 LIBS     := -lSceLibcInternal -lc++ -lkernel -lSceSysmodule -lSceMouse -lSceUserService -lSceNet
 GOLDHEN_SDK ?= $(HOME)/GoldHEN_Plugins_SDK
 
-# Diagnostic build: link only the no-op entrypoint and the official-style CRT.
-# This deliberately excludes every mod subsystem and its imported APIs.
+# GoldHEN PRX: link the official GoldHEN startup CRT before the project objects.
+# BOOT_PROBE=1 remains available only for the isolated no-op loader test.
 LDFLAGS  = -m elf_x86_64 -pie --script $(OO_PS4_TOOLCHAIN)/link.x -e _init --eh-frame-hdr -L$(OO_PS4_TOOLCHAIN)/lib $(LIBS)
 
 CPP_SOURCES := $(wildcard *.cpp)
