@@ -6,7 +6,7 @@
 // threads, memory patches, detours, or mod initialization.
 extern "C" {
 __attribute__((visibility("default")))
-int32_t plugin_load(int32_t argc, const char* argv[])
+int32_t plugin_load(int32_t argc, char* argv[])
 {
     (void)argc;
     (void)argv;
@@ -14,7 +14,7 @@ int32_t plugin_load(int32_t argc, const char* argv[])
 }
 
 __attribute__((visibility("default")))
-int32_t plugin_unload(int32_t argc, const char* argv[])
+int32_t plugin_unload(int32_t argc, char* argv[])
 {
     (void)argc;
     (void)argv;
@@ -428,7 +428,7 @@ int StartPlugin()
 extern "C"
 {
 __attribute__((visibility("default")))
-int32_t plugin_load(int32_t argc, const char* argv[])
+int32_t plugin_load(int32_t argc, char* argv[])
 {
     (void)argc;
     (void)argv;
@@ -436,7 +436,7 @@ int32_t plugin_load(int32_t argc, const char* argv[])
 }
 
 __attribute__((visibility("default")))
-int32_t plugin_unload(int32_t argc, const char* argv[])
+int32_t plugin_unload(int32_t argc, char* argv[])
 {
     (void)argc;
     (void)argv;
