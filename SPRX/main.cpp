@@ -106,7 +106,7 @@ void DiagLogInit()
     sceKernelMkdir("/data/BO3-Customs", 0777);
 
     const char* const primary = "/data/BO3-Customs/diagnostics.log";
-    int fd = sceKernelOpen(primary, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+    int fd = sceKernelOpen(primary, O_WRONLY | O_CREAT | O_APPEND, 0777);
 
     if (fd >= 0)
     {
@@ -116,7 +116,7 @@ void DiagLogInit()
     else
     {
         const char* const fallback = "/data/bo3customs-diagnostics.log";
-        fd = sceKernelOpen(fallback, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+        fd = sceKernelOpen(fallback, O_WRONLY | O_CREAT | O_APPEND, 0777);
 
         if (fd >= 0)
         {
@@ -127,7 +127,7 @@ void DiagLogInit()
 
     if (g_diagLogPath)
     {
-        const char header[] = "BO3-Customs staged runtime diagnostics\n";
+        const char header[] = "\n==== BO3-Customs staged diagnostics session ====\n";
         fd = sceKernelOpen(g_diagLogPath, O_WRONLY | O_CREAT | O_APPEND, 0777);
         if (fd >= 0)
         {
@@ -135,6 +135,10 @@ void DiagLogInit()
             sceKernelClose(fd);
         }
     }
+
+    // Retry on the next log call if neither location was available yet.
+    if (!g_diagLogPath)
+        g_diagLogInitialized = false;
 }
 
 void DiagLog(const char* level, int stage, const char* fmt, ...)
