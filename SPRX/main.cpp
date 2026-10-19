@@ -95,6 +95,7 @@ namespace
 const char* g_diagLogPath = nullptr;
 bool g_diagLogInitialized = false;
 unsigned int g_diagSequence = 0;
+std::atomic_flag g_diagLogBusy = ATOMIC_FLAG_INIT;
 
 void DiagLogInit()
 {
@@ -147,21 +148,37 @@ void DiagLog(const char* level, int stage, const char* fmt, ...)
     vsnprintf(message, sizeof(message), fmt, args);
     va_end(args);
 
+    // The entrypoint and detached worker can log at nearly the same time.
+    // Serialize append operations so each checkpoint stays on its own line.
+    while (g_diagLogBusy.test_and_set(std::memory_order_acquire))
+        sceKernelUsleep(50);
+
     char line[576];
     const int length = snprintf(line, sizeof(line), "[%04u] %-7s stage=%02d %s\n",
                                 ++g_diagSequence, level ? level : "INFO", stage, message);
 
-    if (!g_diagLogPath || length <= 0)
-        return;
-
-    const size_t bytes = (size_t)length < sizeof(line) ? (size_t)length : sizeof(line) - 1;
-    const int fd = sceKernelOpen(g_diagLogPath, O_WRONLY | O_CREAT | O_APPEND, 0777);
-
-    if (fd >= 0)
+    if (g_diagLogPath && length > 0)
     {
-        sceKernelWrite(fd, line, bytes);
-        sceKernelClose(fd);
+        const size_t bytes = (size_t)length < sizeof(line) ? (size_t)length : sizeof(line) - 1;
+        const int fd = sceKernelOpen(g_diagLogPath, O_WRONLY | O_CREAT | O_APPEND, 0777);
+
+        if (fd >= 0)
+        {
+            const char* at = line;
+            size_t left = bytes;
+            while (left)
+            {
+                const int64_t wrote = sceKernelWrite(fd, at, left);
+                if (wrote <= 0)
+                    break;
+                at += (size_t)wrote;
+                left -= (size_t)wrote;
+            }
+            sceKernelClose(fd);
+        }
     }
+
+    g_diagLogBusy.clear(std::memory_order_release);
 }
 
 void DiagStart(int stage, const char* name)
@@ -171,16 +188,20 @@ void DiagStart(int stage, const char* name)
 
 void DiagPass(int stage, const char* name)
 {
-    // Persist PASS before sending the notification: if notification delivery
-    // itself fails, the log still records that the stage operation returned.
+    // PASS is persisted before notification delivery. The notification markers
+    // distinguish a crash inside Notify() from a crash in the stage operation.
     DiagLog("PASS", stage, "%s", name);
+    DiagLog("NOTIFY_START", stage, "sending stage PASS notification");
     Notify("BO3 Customs DIAG\nStage %d/13 PASS:\n%s", stage, name);
+    DiagLog("NOTIFY_RETURN", stage, "stage PASS notification returned");
 }
 
 void DiagFail(int stage, const char* name)
 {
     DiagLog("FAIL", stage, "%s", name);
+    DiagLog("NOTIFY_START", stage, "sending stage FAIL notification");
     Notify("BO3 Customs DIAG\nStage %d/13 FAILED:\n%s", stage, name);
+    DiagLog("NOTIFY_RETURN", stage, "stage FAIL notification returned");
 }
 
 void DiagPause()
