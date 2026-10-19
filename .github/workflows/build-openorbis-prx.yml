@@ -75,7 +75,36 @@ jobs:
           test -s "$RUNNER_TEMP/GoldHEN_Plugins_SDK/build/crtprx.o"
           echo "GOLDHEN_SDK=$RUNNER_TEMP/GoldHEN_Plugins_SDK" >> "$GITHUB_ENV"
 
-      - name: Build and verify automatic staged diagnostic PRX
+      - name: Verify GoldHEN entrypoint lifecycle
+        working-directory: SPRX
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('main.cpp').read_text()
+          start = source.rfind('int module_start(size_t argc, const void* args)')
+          if start < 0:
+              raise SystemExit('full PRX module_start is missing')
+          end = source.index('\\n}', start) + 2
+          module_start = source[start:end]
+          if 'StartPlugin(' in module_start or 'scePthreadCreate(' in module_start:
+              raise SystemExit('module_start must not initialize the GoldHEN plugin')
+          load = source.rfind('int32_t plugin_load(int32_t argc, char* argv[])')
+          if load < 0:
+              raise SystemExit('GoldHEN plugin_load ABI is missing')
+          load_end = source.index('\\n}', load) + 2
+          if 'StartPlugin(' not in source[load:load_end]:
+              raise SystemExit('plugin_load must be the single initializer')
+          required = ['T7Log_Install(base)', 'T7Maps_Install(base)', 'T7MapImages_Install(base)',
+                      'T7Lua_Install(base)', 'T7Kbm_Install(base)', 'T7Builtins_Install(base)',
+                      'T7Share_Install(base)', 'Detour_Attach(']
+          missing = [item for item in required if item not in source]
+          if missing:
+              raise SystemExit('missing runtime components: ' + ', '.join(missing))
+          print('GoldHEN lifecycle and complete mod subsystem wiring verified')
+          PY
+
+      - name: Build and verify full GoldHEN PRX
         working-directory: SPRX
         run: |
           set -euxo pipefail
@@ -93,7 +122,7 @@ jobs:
       - name: Upload PRX artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BO3-Customs-AUTO-DIAG
+          name: BO3-Customs-PRX
           path: SPRX/build/BO3-Customs.prx
           if-no-files-found: error
           retention-days: 14
