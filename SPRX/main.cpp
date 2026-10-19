@@ -189,15 +189,14 @@ void DiagLog(const char* level, int stage, const char* fmt, ...)
         }
     }
 
-    // Mirror every checkpoint to GoldHEN's kernel/debug log. Sandbox file
-    // access can vary by title, so diagnostics must not depend on /data writes.
-    DebugOut(line);
-
     g_diagLogBusy.clear(std::memory_order_release);
 }
 
 void DiagStart(int stage, const char* name)
 {
+    // Put a visible checkpoint before any potentially risky operation. This
+    // also proves that the background worker is actually executing.
+    Notify("BO3 Customs\nStage %d/13 START:\n%s", stage, name);
     DiagLog("START", stage, "%s", name);
 }
 
@@ -236,7 +235,7 @@ static void* start_thread(void*)
     // Stage 1 records that the worker is alive; the first notification is
     // delayed until the BO3 process/title has actually been found.
     DiagStart(1, "plugin worker and file logger");
-    DiagLog("PASS", 1, "plugin worker and file logger returned");
+    DiagPass(1, "plugin worker and file logger returned");
     DiagPause();
 
     DiagStart(2, "wait for Black Ops 3 executable/title strings");
