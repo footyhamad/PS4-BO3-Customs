@@ -40,6 +40,10 @@ int module_stop(size_t argc, const void* args)
 #include <fcntl.h>
 #include <atomic>
 
+#ifndef BO3_CUSTOMS_DIAG_STAGE
+#define BO3_CUSTOMS_DIAG_STAGE 0
+#endif
+
 namespace
 {
 constexpr uintptr_t kTitleProbe = 0x1312346;
@@ -84,6 +88,7 @@ uintptr_t WaitForBlackOps3()
     }
 
     return 0;
+#endif
 }
 }
 
@@ -106,6 +111,11 @@ static void* start_thread(void*)
        Notify("BO3 Customs: startup stopped; BO3 v1.33 signatures did not match");
        return nullptr;
    }
+
+#if BO3_CUSTOMS_DIAG_STAGE == 3
+   Notify("DIAG 3 PASS: BO3 title and v1.33 signatures recognized; no hooks installed");
+   return nullptr;
+#endif
 
    // The game executable and static strings appear before the frontend is
    // initialized. Wait until its UI/Lua runtime is live, then let startup settle
@@ -135,6 +145,11 @@ static void* start_thread(void*)
        Notify("BO3 Customs: startup state changed; hooks were not installed");
        return nullptr;
    }
+
+#if BO3_CUSTOMS_DIAG_STAGE == 4
+   Notify("DIAG 4 PASS: frontend runtime became ready; no hooks installed");
+   return nullptr;
+#endif
 
    const char* rand = sceKernelGetFsSandboxRandomWord();
 
@@ -170,15 +185,52 @@ static void* start_thread(void*)
        }
    }
 
+#if BO3_CUSTOMS_DIAG_STAGE == 5
+    Notify("DIAG 5 PASS: filesystem sandbox/mount stage completed; no hooks installed");
+    return nullptr;
+#endif
+
     T7Log_Install(base);
+#if BO3_CUSTOMS_DIAG_STAGE == 6
+    Notify("DIAG 6 PASS: T7Log_Install returned; no later modules installed");
+    return nullptr;
+#endif
     T7Maps_Install(base);
+#if BO3_CUSTOMS_DIAG_STAGE == 7
+    Notify("DIAG 7 PASS: T7Maps_Install returned; map_count=%d", T7Maps_MapCount());
+    return nullptr;
+#endif
+
     T7MapImages_Install(base);
+#if BO3_CUSTOMS_DIAG_STAGE == 8
+    Notify("DIAG 8 PASS: T7MapImages_Install returned; no later modules installed");
+    return nullptr;
+#endif
+
     T7Lua_Install(base);
+#if BO3_CUSTOMS_DIAG_STAGE == 9
+    Notify("DIAG 9 PASS: T7Lua_Install returned; no later modules installed");
+    return nullptr;
+#endif
+
     T7Kbm_Install(base);
+#if BO3_CUSTOMS_DIAG_STAGE == 10
+    Notify("DIAG 10 PASS: T7Kbm_Install returned; no later modules installed");
+    return nullptr;
+#endif
+
     T7Builtins_Install(base);
+#if BO3_CUSTOMS_DIAG_STAGE == 11
+    Notify("DIAG 11 PASS: T7Builtins_Install returned; no later modules installed");
+    return nullptr;
+#endif
 
     if (T7Maps_MapCount() >= 0)
         T7Share_Install(base);
+#if BO3_CUSTOMS_DIAG_STAGE == 12
+    Notify("DIAG 12 PASS: share service startup returned; frame detour not installed");
+    return nullptr;
+#endif
 
     T7Log_Write("[Maps] %d custom map(s) found", T7Maps_MapCount());
 
@@ -209,6 +261,15 @@ std::atomic<bool> g_pluginStarted{false};
 
 int StartPlugin()
 {
+#if BO3_CUSTOMS_DIAG_STAGE == 1
+    return 0;
+#elif BO3_CUSTOMS_DIAG_STAGE == 2
+    bool expected = false;
+    if (!g_pluginStarted.compare_exchange_strong(expected, true))
+        return 0;
+    Notify("DIAG 2 PASS: full-project PRX entrypoint and notification executed; no thread or hooks");
+    return 0;
+#else
     bool expected = false;
     if (!g_pluginStarted.compare_exchange_strong(expected, true))
         return 0;
