@@ -85,14 +85,14 @@ jobs:
           start = source.rfind('int module_start(size_t argc, const void* args)')
           if start < 0:
               raise SystemExit('full PRX module_start is missing')
-          end = source.index('\\n}', start) + 2
+          end = source.index('\n}', start) + 2
           module_start = source[start:end]
           if 'StartPlugin(' in module_start or 'scePthreadCreate(' in module_start:
               raise SystemExit('module_start must not initialize the GoldHEN plugin')
           load = source.rfind('int32_t plugin_load(int32_t argc, char* argv[])')
           if load < 0:
               raise SystemExit('GoldHEN plugin_load ABI is missing')
-          load_end = source.index('\\n}', load) + 2
+          load_end = source.index('\n}', load) + 2
           if 'StartPlugin(' not in source[load:load_end]:
               raise SystemExit('plugin_load must be the single initializer')
           required = ['T7Log_Install(base)', 'T7Maps_Install(base)', 'T7MapImages_Install(base)',
