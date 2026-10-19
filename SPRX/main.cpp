@@ -40,9 +40,6 @@ int module_stop(size_t argc, const void* args)
 #include <fcntl.h>
 #include <atomic>
 
-#ifndef BO3_CUSTOMS_DIAG_STAGE
-#define BO3_CUSTOMS_DIAG_STAGE 0
-#endif
 
 namespace
 {
@@ -93,164 +90,276 @@ uintptr_t WaitForBlackOps3()
 
 extern "C" const char* sceKernelGetFsSandboxRandomWord();
 
+namespace
+{
+const char* g_diagLogPath = nullptr;
+bool g_diagLogInitialized = false;
+unsigned int g_diagSequence = 0;
+
+void DiagLogInit()
+{
+    if (g_diagLogInitialized)
+        return;
+
+    g_diagLogInitialized = true;
+    sceKernelMkdir("/data/BO3-Customs", 0777);
+
+    const char* const primary = "/data/BO3-Customs/diagnostics.log";
+    int fd = sceKernelOpen(primary, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+
+    if (fd >= 0)
+    {
+        g_diagLogPath = primary;
+        sceKernelClose(fd);
+    }
+    else
+    {
+        const char* const fallback = "/data/bo3customs-diagnostics.log";
+        fd = sceKernelOpen(fallback, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+
+        if (fd >= 0)
+        {
+            g_diagLogPath = fallback;
+            sceKernelClose(fd);
+        }
+    }
+
+    if (g_diagLogPath)
+    {
+        const char header[] = "BO3-Customs staged runtime diagnostics\n";
+        fd = sceKernelOpen(g_diagLogPath, O_WRONLY | O_CREAT | O_APPEND, 0777);
+        if (fd >= 0)
+        {
+            sceKernelWrite(fd, header, sizeof(header) - 1);
+            sceKernelClose(fd);
+        }
+    }
+}
+
+void DiagLog(const char* level, int stage, const char* fmt, ...)
+{
+    if (!g_diagLogInitialized)
+        DiagLogInit();
+
+    char message[384];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(message, sizeof(message), fmt, args);
+    va_end(args);
+
+    char line[576];
+    const int length = snprintf(line, sizeof(line), "[%04u] %-7s stage=%02d %s\n",
+                                ++g_diagSequence, level ? level : "INFO", stage, message);
+
+    if (!g_diagLogPath || length <= 0)
+        return;
+
+    const size_t bytes = (size_t)length < sizeof(line) ? (size_t)length : sizeof(line) - 1;
+    const int fd = sceKernelOpen(g_diagLogPath, O_WRONLY | O_CREAT | O_APPEND, 0777);
+
+    if (fd >= 0)
+    {
+        sceKernelWrite(fd, line, bytes);
+        sceKernelClose(fd);
+    }
+}
+
+void DiagStart(int stage, const char* name)
+{
+    DiagLog("START", stage, "%s", name);
+}
+
+void DiagPass(int stage, const char* name)
+{
+    // Persist PASS before sending the notification: if notification delivery
+    // itself fails, the log still records that the stage operation returned.
+    DiagLog("PASS", stage, "%s", name);
+    Notify("BO3 Customs DIAG\nStage %d/13 PASS:\n%s", stage, name);
+}
+
+void DiagFail(int stage, const char* name)
+{
+    DiagLog("FAIL", stage, "%s", name);
+    Notify("BO3 Customs DIAG\nStage %d/13 FAILED:\n%s", stage, name);
+}
+
+void DiagPause()
+{
+    sceKernelUsleep(3 * 1000 * 1000);
+}
+}
+
 static void* start_thread(void*)
 {
-   const uintptr_t base = WaitForBlackOps3();
+    DiagLog("BOOT", 0, "initialization thread started; log=%s",
+            g_diagLogPath ? g_diagLogPath : "log file unavailable");
 
-   if (!base)
-   {
-       Notify("BO3 Customs: BO3 v1.33 was not detected after 10 minutes");
-       return nullptr;
-   }
+    // Stage 1 validates that the full project's startup thread and notification
+    // function can execute without touching the game or installing hooks.
+    DiagStart(1, "plugin thread and notification path");
+    DiagPass(1, "plugin thread and notification path returned");
+    DiagPause();
 
-   // Never install offsets/hooks into an executable whose BO3 v1.33
-   // prologues do not match. A title string alone is not a build check.
-   if (!T7Maps_BuildSupported(base))
-   {
-       Notify("BO3 Customs: startup stopped; BO3 v1.33 signatures did not match");
-       return nullptr;
-   }
+    DiagStart(2, "wait for Black Ops 3 executable/title strings");
+    uintptr_t base = 0;
+    for (int attempt = 0; attempt < 6000; ++attempt)
+    {
+        base = (uintptr_t)GetBaseAddress();
+        if (base && IsBlackOps3(base))
+            break;
 
-#if BO3_CUSTOMS_DIAG_STAGE == 3
-   Notify("DIAG 3 PASS: BO3 title and v1.33 signatures recognized; no hooks installed");
-   return nullptr;
-#endif
+        if ((attempt % 30) == 0)
+            DiagLog("WAIT", 2, "waiting for BO3 title; attempt=%d/6000 base=%p",
+                    attempt, (void*)base);
+        sceKernelUsleep(100 * 1000);
+    }
 
-   // The game executable and static strings appear before the frontend is
-   // initialized. Wait until its UI/Lua runtime is live, then let startup settle
-   // before patching any code so we do not race BO3's early initialization.
-   bool frontendReady = false;
-   for (int attempt = 0; attempt < 6000; ++attempt)
-   {
-       if (T7Lua_RuntimeReady(base))
-       {
-           frontendReady = true;
-           break;
-       }
+    if (!base || !IsBlackOps3(base))
+    {
+        DiagFail(2, "BO3 title was not detected within 10 minutes");
+        return nullptr;
+    }
+    DiagPass(2, "BO3 executable and title strings detected");
+    DiagPause();
 
-       sceKernelUsleep(100 * 1000);
-   }
+    DiagStart(3, "verify known BO3 v1.33 function signatures");
+    if (!T7Maps_BuildSupported(base))
+    {
+        DiagFail(3, "BO3 v1.33 signatures did not match; no hooks attempted");
+        return nullptr;
+    }
+    DiagPass(3, "BO3 v1.33 signature preflight passed");
+    DiagPause();
 
-   if (!frontendReady)
-   {
-       Notify("BO3 Customs: frontend did not become ready; hooks were not installed");
-       return nullptr;
-   }
+    DiagStart(4, "wait for frontend UI/Lua runtime readiness");
+    bool frontendReady = false;
+    for (int attempt = 0; attempt < 6000; ++attempt)
+    {
+        if (T7Lua_RuntimeReady(base))
+        {
+            frontendReady = true;
+            break;
+        }
 
-   sceKernelUsleep(1500 * 1000);
+        if ((attempt % 30) == 0)
+            DiagLog("WAIT", 4, "waiting for frontend UI/Lua; attempt=%d/6000", attempt);
+        sceKernelUsleep(100 * 1000);
+    }
 
-   if (!T7Maps_BuildSupported(base) || !T7Lua_RuntimeReady(base))
-   {
-       Notify("BO3 Customs: startup state changed; hooks were not installed");
-       return nullptr;
-   }
+    if (!frontendReady)
+    {
+        DiagFail(4, "frontend UI/Lua runtime did not become ready within 10 minutes");
+        return nullptr;
+    }
 
-#if BO3_CUSTOMS_DIAG_STAGE == 4
-   Notify("DIAG 4 PASS: frontend runtime became ready; no hooks installed");
-   return nullptr;
-#endif
+    // Let frontend startup settle before any hook installer executes.
+    sceKernelUsleep(1500 * 1000);
+    if (!T7Maps_BuildSupported(base) || !T7Lua_RuntimeReady(base))
+    {
+        DiagFail(4, "signature or frontend readiness changed before initialization");
+        return nullptr;
+    }
+    DiagPass(4, "frontend UI/Lua runtime ready and revalidated");
+    DiagPause();
 
-   const char* rand = sceKernelGetFsSandboxRandomWord();
+    DiagStart(5, "filesystem sandbox detection and external-root mount calls");
+    const char* const rand = sceKernelGetFsSandboxRandomWord();
+    bool is_ps5 = false;
 
-   char path[256 * 2];
-   snprintf(path, sizeof(path), "/%s/common/lib/libSceNotification.sprx", rand);
+    if (rand && rand[0])
+    {
+        char path[256];
+        snprintf(path, sizeof(path), "/%s/common/lib/libSceNotification.sprx", rand);
 
-   bool is_ps5 = false;
-   int fd = sceKernelOpen(path, O_RDONLY, 0);
+        const int fd = sceKernelOpen(path, O_RDONLY, 0);
+        if (fd >= 0)
+        {
+            is_ps5 = true;
+            sceKernelClose(fd);
+        }
+    }
+    else
+    {
+        DiagLog("WARN", 5, "filesystem sandbox random word was null/empty; external mount scan skipped");
+    }
 
-   if (fd >= 0)
-   {
-       is_ps5 = true;
-       sceKernelClose(fd);
-   }
+    if (!is_ps5 && rand && rand[0])
+    {
+        for (const char* const drive : k_driveRoots)
+        {
+            char mnt[128];
+            const int len = snprintf(mnt, sizeof(mnt), "/mnt/%s", drive);
+            if (len < 0 || static_cast<size_t>(len) >= sizeof(mnt))
+                continue;
 
-   if (!is_ps5)
-   {
-       for (const char* const drive : k_driveRoots)
-       {
-           char mnt[128];
-           int len = snprintf(mnt, sizeof(mnt), "/mnt/%s", drive);
+            jbc_mount_in_sandbox(mnt, drive);
+        }
+    }
 
-           if (len < 0 || static_cast<size_t>(len) >= sizeof(mnt))
-               continue;
+    DiagPass(5, "filesystem sandbox/mount stage returned");
+    DiagPause();
 
-           char sandboxPath[128];
-           len = snprintf(sandboxPath, sizeof(sandboxPath), "/%s", drive);
-
-           if (len < 0 || static_cast<size_t>(len) >= sizeof(sandboxPath))
-               continue;
-           
-           jbc_mount_in_sandbox(mnt, drive);
-       }
-   }
-
-#if BO3_CUSTOMS_DIAG_STAGE == 5
-    Notify("DIAG 5 PASS: filesystem sandbox/mount stage completed; no hooks installed");
-    return nullptr;
-#endif
-
+    DiagStart(6, "T7Log_Install");
     T7Log_Install(base);
-#if BO3_CUSTOMS_DIAG_STAGE == 6
-    Notify("DIAG 6 PASS: T7Log_Install returned; no later modules installed");
-    return nullptr;
-#endif
+    DiagPass(6, "T7Log_Install returned");
+    DiagPause();
+
+    DiagStart(7, "T7Maps_Install and custom map/mod scan");
     T7Maps_Install(base);
-#if BO3_CUSTOMS_DIAG_STAGE == 7
-    Notify("DIAG 7 PASS: T7Maps_Install returned; map_count=%d", T7Maps_MapCount());
-    return nullptr;
-#endif
+    const int mapCount = T7Maps_MapCount();
+    const int modCount = T7Maps_ModCount();
+    DiagLog("INFO", 7, "map_count=%d mod_count=%d", mapCount, modCount);
+    T7Log_Write("[Maps] %d custom map(s), %d mod(s) found", mapCount, modCount);
+    DiagPass(7, "T7Maps_Install returned");
+    DiagPause();
 
+    DiagStart(8, "T7MapImages_Install");
     T7MapImages_Install(base);
-#if BO3_CUSTOMS_DIAG_STAGE == 8
-    Notify("DIAG 8 PASS: T7MapImages_Install returned; no later modules installed");
-    return nullptr;
-#endif
+    DiagPass(8, "T7MapImages_Install returned");
+    DiagPause();
 
+    DiagStart(9, "T7Lua_Install");
     T7Lua_Install(base);
-#if BO3_CUSTOMS_DIAG_STAGE == 9
-    Notify("DIAG 9 PASS: T7Lua_Install returned; no later modules installed");
-    return nullptr;
-#endif
+    DiagPass(9, "T7Lua_Install returned");
+    DiagPause();
 
+    DiagStart(10, "T7Kbm_Install");
     T7Kbm_Install(base);
-#if BO3_CUSTOMS_DIAG_STAGE == 10
-    Notify("DIAG 10 PASS: T7Kbm_Install returned; no later modules installed");
-    return nullptr;
-#endif
+    DiagPass(10, "T7Kbm_Install returned");
+    DiagPause();
 
+    DiagStart(11, "T7Builtins_Install");
     T7Builtins_Install(base);
-#if BO3_CUSTOMS_DIAG_STAGE == 11
-    Notify("DIAG 11 PASS: T7Builtins_Install returned; no later modules installed");
-    return nullptr;
-#endif
+    DiagPass(11, "T7Builtins_Install returned");
+    DiagPause();
 
+    DiagStart(12, "T7Share_Install / background share server");
     if (T7Maps_MapCount() >= 0)
         T7Share_Install(base);
-#if BO3_CUSTOMS_DIAG_STAGE == 12
-    Notify("DIAG 12 PASS: share service startup returned; frame detour not installed");
-    return nullptr;
-#endif
+    else
+        DiagLog("SKIP", 12, "map_count is negative; share server not started");
+    DiagPass(12, "share service stage returned");
+    DiagPause();
 
-    T7Log_Write("[Maps] %d custom map(s) found", T7Maps_MapCount());
-
+    DiagStart(13, "frame detour at the BO3 v1.33 frame function");
+    bool frameInstalled = false;
     if (RangeReadable(base + kComFrame, sizeof(k_comFrame)) &&
         memcmp((const void*)(base + kComFrame), k_comFrame, sizeof(k_comFrame)) == 0)
     {
-        Detour_Attach(&g_frameDetour, (uint64_t)(base + kComFrame), (void*)Frame_h, &g_frameOriginal);
+        frameInstalled = Detour_Attach(&g_frameDetour, (uint64_t)(base + kComFrame),
+                                       (void*)Frame_h, &g_frameOriginal) != nullptr;
     }
 
-    if (T7Maps_MapCount() < 0)
-        Notify("BO3 Customs Mod loaded!\nCreated by ItsJokerZz. This game build is not supported - it needs version 1.33");
+    if (frameInstalled)
+        DiagPass(13, "frame detour installed; all startup stages returned");
     else
     {
-        char buff[256];
-        if (T7Maps_ModCount() > 0)
-            snprintf(buff, sizeof(buff), "BO3 Customs Mod loaded!\nCreated by ItsJokerZz.\nFound %d custom map(s) and %d mod(s)", T7Maps_MapCount(), T7Maps_ModCount());
-        else
-            snprintf(buff, sizeof(buff), "BO3 Customs Mod loaded!\nCreated by ItsJokerZz.\nFound %d custom map(s)", T7Maps_MapCount());
-        Notify(buff);
+        DiagLog("WARN", 13, "frame signature mismatch or detour install failed; other stages completed");
+        DiagPass(13, "stage completed, but frame detour was not installed");
     }
 
+    DiagLog("DONE", 13, "all stages returned; maps=%d mods=%d", T7Maps_MapCount(), T7Maps_ModCount());
+    Notify("BO3 Customs DIAG\nAll 13 stages returned.\nCheck diagnostics.log");
     return nullptr;
 }
 
@@ -260,39 +369,33 @@ std::atomic<bool> g_pluginStarted{false};
 
 int StartPlugin()
 {
-#if BO3_CUSTOMS_DIAG_STAGE == 1
-    return 0;
-#elif BO3_CUSTOMS_DIAG_STAGE == 2
-    bool expected = false;
-    if (!g_pluginStarted.compare_exchange_strong(expected, true))
-        return 0;
-    Notify("DIAG 2 PASS: full-project PRX entrypoint and notification executed; no thread or hooks");
-    return 0;
-#else
     bool expected = false;
     if (!g_pluginStarted.compare_exchange_strong(expected, true))
         return 0;
 
-    Notify("BO3 Customs plugin started; waiting for BO3 v1.33");
+    DiagLogInit();
+    DiagLog("BOOT", 0, "plugin entrypoint reached; creating init thread");
 
     OrbisPthread thread{};
     const int createResult = scePthreadCreate(&thread, nullptr, start_thread, nullptr, "BO3-Customs Init");
     if (createResult != 0)
     {
+        DiagLog("FAIL", 0, "scePthreadCreate failed: %d", createResult);
+        Notify("BO3 Customs DIAG: init thread create failed (%d)", createResult);
         g_pluginStarted.store(false);
-        Notify("BO3 Customs: failed to start initialization thread (%d)", createResult);
         return createResult;
     }
 
     const int detachResult = scePthreadDetach(thread);
     if (detachResult != 0)
     {
-        Notify("BO3 Customs: failed to detach initialization thread (%d)", detachResult);
+        DiagLog("FAIL", 0, "scePthreadDetach failed: %d", detachResult);
+        Notify("BO3 Customs DIAG: init thread detach failed (%d)", detachResult);
         return detachResult;
     }
 
+    DiagLog("INFO", 0, "init thread detached successfully");
     return 0;
-#endif
 }
 }
 
