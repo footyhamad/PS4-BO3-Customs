@@ -88,7 +88,6 @@ uintptr_t WaitForBlackOps3()
     }
 
     return 0;
-#endif
 }
 }
 
@@ -293,6 +292,7 @@ int StartPlugin()
     }
 
     return 0;
+#endif
 }
 }
 
