@@ -29,6 +29,9 @@ CPP_SOURCES := main.cpp
 C_SOURCES :=
 LIBS := -lSceLibcInternal -lkernel -lSceSysmodule
 endif
+ifneq ($(filter-out 0,$(DIAG_STAGE)),)
+CXXFLAGS += -DBO3_CUSTOMS_DIAG_STAGE=$(DIAG_STAGE)
+endif
 OBJECTS     := $(patsubst %.cpp,$(OUT)/%.o,$(CPP_SOURCES)) $(patsubst %.c,$(OUT)/%.o,$(C_SOURCES))
 
 .PHONY: all clean
