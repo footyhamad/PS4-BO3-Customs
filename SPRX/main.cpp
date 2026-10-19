@@ -6,7 +6,7 @@
 // threads, memory patches, detours, or mod initialization.
 extern "C" {
 __attribute__((visibility("default")))
-int32_t plugin_load(int32_t argc, char* argv[])
+int32_t plugin_load(int32_t argc, const char* argv[])
 {
     (void)argc;
     (void)argv;
@@ -14,7 +14,7 @@ int32_t plugin_load(int32_t argc, char* argv[])
 }
 
 __attribute__((visibility("default")))
-int32_t plugin_unload(int32_t argc, char* argv[])
+int32_t plugin_unload(int32_t argc, const char* argv[])
 {
     (void)argc;
     (void)argv;
@@ -40,6 +40,13 @@ int module_stop(size_t argc, const void* args)
 #include <fcntl.h>
 #include <atomic>
 
+
+extern "C" {
+__attribute__((visibility("default"))) const char* g_pluginName = "BO3-Customs";
+__attribute__((visibility("default"))) const char* g_pluginDesc = "Black Ops 3 custom maps and mod support";
+__attribute__((visibility("default"))) const char* g_pluginAuth = "BO3-Customs contributors";
+__attribute__((visibility("default"))) uint32_t g_pluginVersion = 0x00010235;
+}
 
 namespace
 {
@@ -182,6 +189,10 @@ void DiagLog(const char* level, int stage, const char* fmt, ...)
         }
     }
 
+    // Mirror every checkpoint to GoldHEN's kernel/debug log. Sandbox file
+    // access can vary by title, so diagnostics must not depend on /data writes.
+    DebugOut(line);
+
     g_diagLogBusy.clear(std::memory_order_release);
 }
 
@@ -259,35 +270,16 @@ static void* start_thread(void*)
     DiagPass(3, "BO3 v1.33 signature preflight passed");
     DiagPause();
 
-    DiagStart(4, "wait for frontend UI/Lua runtime readiness");
-    bool frontendReady = false;
-    for (int attempt = 0; attempt < 6000; ++attempt)
-    {
-        if (T7Lua_RuntimeReady(base))
-        {
-            frontendReady = true;
-            break;
-        }
-
-        if ((attempt % 30) == 0)
-            DiagLog("WAIT", 4, "waiting for frontend UI/Lua; attempt=%d/6000", attempt);
-        sceKernelUsleep(100 * 1000);
-    }
-
-    if (!frontendReady)
-    {
-        DiagFail(4, "frontend UI/Lua runtime did not become ready within 10 minutes");
-        return nullptr;
-    }
-
-    // Let frontend startup settle before any hook installer executes.
-    sceKernelUsleep(1500 * 1000);
-    if (!T7Maps_BuildSupported(base) || !T7Lua_RuntimeReady(base))
-    {
-        DiagFail(4, "signature or frontend readiness changed before initialization");
-        return nullptr;
-    }
-    DiagPass(4, "frontend UI/Lua runtime ready and revalidated");
+    DiagStart(4, "snapshot frontend UI/Lua readiness");
+    const bool frontendReady = T7Lua_RuntimeReady(base);
+    DiagLog("INFO", 4, "frontend_ready=%d; continuing startup without blocking core subsystem installation",
+            frontendReady ? 1 : 0);
+    // The previous diagnostic build made every subsystem depend on this UI
+    // probe. That is stricter than the original plugin and can prevent maps
+    // from ever being scanned. Individual hooks already defer work until UI
+    // state is valid, so record readiness but do not make it a global gate.
+    DiagPass(4, frontendReady ? "frontend/Lua runtime already ready" :
+                                "frontend/Lua runtime not ready yet; safe deferred hooks will continue");
     DiagPause();
 
     DiagStart(5, "filesystem sandbox detection and external-root mount calls");
@@ -421,6 +413,11 @@ int StartPlugin()
     }
 
     DiagLog("INFO", 0, "init thread detached successfully");
+
+    // Match GoldHEN's own plugin template: plugin_load may issue a notification
+    // immediately. This confirms that the callback really ran even if game
+    // title detection or any later stage does not.
+    Notify("BO3 Customs PRX loaded; initialization starting");
     return 0;
 }
 }
@@ -428,7 +425,7 @@ int StartPlugin()
 extern "C"
 {
 __attribute__((visibility("default")))
-int32_t plugin_load(int32_t argc, char* argv[])
+int32_t plugin_load(int32_t argc, const char* argv[])
 {
     (void)argc;
     (void)argv;
@@ -436,7 +433,7 @@ int32_t plugin_load(int32_t argc, char* argv[])
 }
 
 __attribute__((visibility("default")))
-int32_t plugin_unload(int32_t argc, char* argv[])
+int32_t plugin_unload(int32_t argc, const char* argv[])
 {
     (void)argc;
     (void)argv;
