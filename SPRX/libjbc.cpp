@@ -382,7 +382,7 @@ SYSCALL(12, static int chdir(char* path))
 SYSCALL(22, static int unmount(const char* path, int flags))
 SYSCALL(136, static int mkdir(const char* path, int mode))
 SYSCALL(137, static int sys_rmdir(const char* path))
-SYSCALL(326, static int getcwd(char* buf, size_t sz))
+SYSCALL(326, static int jbc_sys_getcwd(char* buf, size_t sz))
 SYSCALL(378, static int nmount(struct iovec* iov, unsigned int niov, int flags))
 
 #define MAX_PATH 1024
@@ -408,7 +408,7 @@ static void do_mount_in_sandbox(void* op)
     size_t l3 = 0;
 
 
-    if ((error = getcwd(path, MAX_PATH)))
+    if ((error = jbc_sys_getcwd(path, MAX_PATH)))
         goto err_out;
      l1 = 0;
     while (path[l1])
