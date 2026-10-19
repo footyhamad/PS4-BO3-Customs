@@ -99,7 +99,7 @@ jobs:
                       'T7Lua_Install(base)', 'T7Kbm_Install(base)', 'T7Builtins_Install(base)',
                       'T7Share_Install(base)', 'Detour_Attach(', 'g_pluginName', 'g_pluginVersion',
                       'Notify("BO3 Customs PRX loaded; initialization starting")',
-                      'DebugOut(line)', 'snapshot frontend UI/Lua readiness']
+                      'Notify("BO3 Customs\\nStage %d/13 START:\\n%s", stage, name)', 'snapshot frontend UI/Lua readiness']
           missing = [item for item in required if item not in source]
           if missing:
               raise SystemExit('missing runtime components: ' + ', '.join(missing))
