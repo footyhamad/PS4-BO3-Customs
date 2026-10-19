@@ -221,8 +221,11 @@ static void* start_thread(void*)
 
     // Stage 1 validates that the full project's startup thread and notification
     // function can execute without touching the game or installing hooks.
-    DiagStart(1, "plugin thread and notification path");
-    DiagPass(1, "plugin thread and notification path returned");
+    // Do not call the notification API during the loader callback path.
+    // Stage 1 records that the worker is alive; the first notification is
+    // delayed until the BO3 process/title has actually been found.
+    DiagStart(1, "plugin worker and file logger");
+    DiagLog("PASS", 1, "plugin worker and file logger returned");
     DiagPause();
 
     DiagStart(2, "wait for Black Ops 3 executable/title strings");
@@ -406,7 +409,6 @@ int StartPlugin()
     if (createResult != 0)
     {
         DiagLog("FAIL", 0, "scePthreadCreate failed: %d", createResult);
-        Notify("BO3 Customs DIAG: init thread create failed (%d)", createResult);
         g_pluginStarted.store(false);
         return createResult;
     }
@@ -415,7 +417,6 @@ int StartPlugin()
     if (detachResult != 0)
     {
         DiagLog("FAIL", 0, "scePthreadDetach failed: %d", detachResult);
-        Notify("BO3 Customs DIAG: init thread detach failed (%d)", detachResult);
         return detachResult;
     }
 
@@ -444,9 +445,14 @@ int32_t plugin_unload(int32_t argc, const char* argv[])
 
 int module_start(size_t argc, const void* args)
 {
+    // GoldHEN first calls sceKernelLoadStartModule(), which invokes
+    // module_start before the plugin loader invokes plugin_load. Starting
+    // threads or touching game state here races module loading. This entry
+    // is intentionally inert for the GoldHEN PRX build; plugin_load is the
+    // single initialization entrypoint.
     (void)argc;
     (void)args;
-    return StartPlugin();
+    return 0;
 }
 
 int module_stop(size_t argc, const void* args)
