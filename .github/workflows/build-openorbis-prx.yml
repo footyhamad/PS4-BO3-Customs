@@ -89,7 +89,7 @@ jobs:
           module_start = source[start:end]
           if 'StartPlugin(' in module_start or 'scePthreadCreate(' in module_start:
               raise SystemExit('module_start must not initialize the GoldHEN plugin')
-          load = source.rfind('int32_t plugin_load(int32_t argc, char* argv[])')
+          load = source.rfind('int32_t plugin_load(int32_t argc, const char* argv[])')
           if load < 0:
               raise SystemExit('GoldHEN plugin_load ABI is missing')
           load_end = source.index('\n}', load) + 2
@@ -97,7 +97,9 @@ jobs:
               raise SystemExit('plugin_load must be the single initializer')
           required = ['T7Log_Install(base)', 'T7Maps_Install(base)', 'T7MapImages_Install(base)',
                       'T7Lua_Install(base)', 'T7Kbm_Install(base)', 'T7Builtins_Install(base)',
-                      'T7Share_Install(base)', 'Detour_Attach(']
+                      'T7Share_Install(base)', 'Detour_Attach(', 'g_pluginName', 'g_pluginVersion',
+                      'Notify("BO3 Customs PRX loaded; initialization starting")',
+                      'DebugOut(line)', 'snapshot frontend UI/Lua readiness']
           missing = [item for item in required if item not in source]
           if missing:
               raise SystemExit('missing runtime components: ' + ', '.join(missing))
